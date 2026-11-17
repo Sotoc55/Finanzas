@@ -118,6 +118,9 @@ svg.ch{width:100%;height:210px;display:block}
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 20px;border-radius:12px;z-index:90;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.3);max-width:92vw}
 .flows{max-height:220px;overflow:auto}
 .gl dt{font-weight:800;color:var(--navy);margin-top:14px}.gl dd{margin:2px 0 0;color:var(--txt)}
+.pq{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}.pq div{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 12px}.pq span{display:block;font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase}.pq b{font-size:18px}
+.qty .lim{flex:1;width:auto;font-size:13px;padding:8px 0}
+.bk th,.bk td{text-align:right}.bk td{padding:6px 12px}
 @media(max-width:820px){.mbody{grid-template-columns:1fr}.mleft{border-right:0;border-bottom:1px solid var(--line)}main{padding:12px}.hrow{padding:10px 12px}nav{margin-left:0;width:100%}}
 </style>
 </head>
@@ -202,17 +205,21 @@ async function getPayload(){
   return JSON.parse(m[1]);
 }
 function normEquity(r,type,panel){
-  return {tk:r.tk,name:r.de,type,panel,sector:r.sec||'',isin:r.isin||'',ratio:r.ratio||null,
+  return {tk:r.tk,ccy:'ARS',name:r.de,type,panel,sector:r.sec||'',isin:r.isin||'',ratio:r.ratio||null,
     px:r.px,prev:r.pxp,open:r.ap,hi:r.mx,lo:r.mn,vol:r.vn,amt:r.ve,ops:r.op,beta:r.beta==null?null:r.beta,
     h:Array.isArray(r.h)?r.h:[],unit:1,fixed:false};
 }
 function normBond(r,type){
   const px=r.pxa;
   const prev=(r.pxd!=null&&px)?px/(1+r.pxd/100):null;
-  return {tk:r.tk,name:(r.em?r.em+' · ':'')+(r.de||''),type,panel:type,sector:r.sec||'',isin:r.isin||'',
+  return {tk:r.tk,ccy:'ARS',name:(r.em?r.em+' · ':'')+(r.de||''),type,panel:type,sector:r.sec||'',isin:r.isin||'',
     px,prev,unit:100,fixed:true,cur:r.me,h:[],amt:r.vol,vol:r.vn,
     bond:{ytm:r.ytm,dm:r.dm,wal:r.wal,par:r.par,vt:r.vt,ai:r.ai,cup:r.cup,fv:r.fv,fe:r.fe,ley:r.ley,est:r.est,fc:r.fc,
       em:r.em,mto:r.mto,usd:r.px,ren:Array.isArray(r.ren)?r.ren:[],amo:Array.isArray(r.amo)?r.amo:[],pam:r.pam}};
+}
+const usdTk=tk=>/O$/.test(tk)?tk.slice(0,-1)+'D':tk+'D';
+function makeTwin(it,px,prev){
+  return {...it,tk:usdTk(it.tk),ccy:'USD',px,prev,h:[],open:null,hi:null,lo:null,vol:null,amt:null,ops:null,twinOf:it.tk,bk:null,base:null,live:false};
 }
 function buildMarket(acc,ced,pay){
   const items=[];
@@ -227,6 +234,12 @@ function buildMarket(acc,ced,pay){
   }
   const map={};
   items.filter(i=>i.tk&&i.px>0).forEach(i=>{map[i.tk]=i});
+  // Versión en dólares (MEP) de bonos y ONs hard-dollar, derivada del precio en USD del Tablero
+  Object.values(map).forEach(i=>{
+    if(i.bond&&i.cur==='USD'&&i.bond.usd>0&&!map[usdTk(i.tk)]){
+      const t=makeTwin(i,i.bond.usd,i.prev&&i.px?i.bond.usd*i.prev/i.px:null);t.derived=true;map[t.tk]=t;
+    }
+  });
   return {date:acc.fecha||(pay&&pay.tp&&pay.tp.fecha)||null,prevDate:acc.fprev||null,
     fx:pay&&pay.tp&&pay.tp.fx||null,items:Object.values(map),map,bondsOk:!!pay,savedAt:Date.now()};
 }
@@ -241,23 +254,26 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const money=n=>(n==null||isNaN(n))?'—':(n<0?'−':'')+'$ '+fmt(Math.abs(n));
+const usd=n=>(n==null||isNaN(n))?'—':(n<0?'−':'')+'US$ '+fmt(Math.abs(n));
+const moneyC=(n,c)=>c==='USD'?usd(n):money(n);
+const abbr=n=>n==null||isNaN(n)?'—':n>=1e9?'$ '+fmt(n/1e9,1)+' mil M':n>=1e6?'$ '+fmt(n/1e6,1)+' M':money(n);
 const pct=n=>(n==null||isNaN(n))?'—':(n>0?'+':n<0?'−':'')+fmt(Math.abs(n))+'%';
 const cls=n=>n>0?'up':n<0?'down':'';
-const abbr=n=>n==null||isNaN(n)?'—':n>=1e9?'$ '+fmt(n/1e9,1)+' mil M':n>=1e6?'$ '+fmt(n/1e6,1)+' M':money(n);
 const fdate=d=>{if(!d)return '—';const p=String(d).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d};
 const fts=t=>{const d=new Date(t);const z=n=>String(n).padStart(2,'0');return z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear()+' '+z(d.getHours())+':'+z(d.getMinutes())};
 const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
-function toast(m,ms=3200){const t=document.createElement('div');t.className='toast';t.textContent=m;$('#toastHost').appendChild(t);setTimeout(()=>t.remove(),ms)}
+function toast(m,ms=3600){const t=document.createElement('div');t.className='toast';t.textContent=m;$('#toastHost').appendChild(t);setTimeout(()=>t.remove(),ms)}
 
 /* ===== ESTADO / CUENTA ===== */
 const API='/api/cartera';
-const COM_DEFAULT=0.5, DERECHOS=0.08;
+const COM_DEFAULT=0.5, DERECHOS=0.08, BAND=0.05;
 let S=null, MKT=null, backend=false, syncState='', mktState='load';
 const newId=()=>Math.random().toString(36).slice(2,9);
 function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const a=new Uint8Array(12);(window.crypto||{getRandomValues:x=>x.map(()=>Math.random()*256)}).getRandomValues(a);let s='';a.forEach((v,i)=>{s+=A[v%A.length];if(i%4===3&&i<11)s+='-'});return s}
 const okCode=c=>/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c);
 const normCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(.{4})(.{4})/,'$1-$2-$3');
-function newState(name,cash){return {v:1,code:genCode(),name:name||'',created:Date.now(),updated:Date.now(),startCash:cash,cash,comPct:COM_DEFAULT,orders:[]}}
+function newState(name,cash){return {v:2,code:genCode(),name:name||'',created:Date.now(),updated:Date.now(),startCash:cash,cash,usd:0,comPct:COM_DEFAULT,orders:[],fxops:[]}}
+function migrate(st){if(st.usd==null)st.usd=0;if(!st.fxops)st.fxops=[];return st}
 function saveLocal(){if(S)LS.set('sim.state.'+S.code,JSON.stringify(S))}
 function setSync(s){syncState=s;const c=$('#chipSync');if(!c)return;
   c.className='chip '+(s==='ok'?'ok':s==='err'?'bad':s==='pend'?'warn':'');
@@ -268,48 +284,82 @@ async function pushNow(){try{const r=await fetch(API+'?code='+encodeURIComponent
 async function detectBackend(){try{const r=await fetch(API+'?ping=1',{cache:'no-store'});const j=await r.json();backend=!!(j&&j.ok)}catch(e){backend=false}}
 async function pullRemote(code){const r=await fetch(API+'?code='+encodeURIComponent(code),{cache:'no-store'});if(r.status===404)return null;if(!r.ok)throw new Error('http');const j=await r.json();return j.state||null}
 
-/* ===== CÁLCULOS ===== */
+/* ===== MONEDAS, CAJA DE PUNTAS Y CÁLCULOS ===== */
+const ccyOf=it=>it&&it.ccy==='USD'?'USD':'ARS';
+const oc=o=>o.ccy||'ARS';
+const cashOf=c=>c==='USD'?S.usd:S.cash;
+const addCash=(c,v)=>{if(c==='USD')S.usd+=v;else S.cash+=v};
+const mepNow=()=>(MKT&&MKT.mep)||(MKT&&MKT.fx&&MKT.fx.mep)||null;
 const feePct=()=>((S&&S.comPct!=null?S.comPct:COM_DEFAULT)+DERECHOS)/100;
 const gross=(it,qty,px)=>qty*px/it.unit;
+const pdec=it=>it&&it.px<10?3:2;
+const pxs=(it,n)=>(ccyOf(it)==='USD'?'US$ ':'$ ')+fmt(n,pdec(it));
+function hashS(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){return()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function tickOf(it){const p=it.px;if(it.type==='Letra')return 0.01;if(p<1)return 0.001;const s=5*Math.pow(10,Math.floor(Math.log10(p))-3);return Math.max(s,p<10?0.005:0.01)}
+/* Caja de puntas: 5 niveles. La mejor punta es real si Rava la informa; el resto (o todo) es simulado y estable. */
+function bookOf(it){
+  const key=it.tk+'|'+(MKT&&(MKT.stamp||MKT.date)||'');
+  if(it._bk&&it._bk.key===key)return it._bk;
+  const R=rng(hashS(key)),t=tickOf(it);
+  const rd=v=>+(Math.round(v/t)*t).toFixed(6);
+  const k=it.bk;let bid,ask,qb=0,qa=0,real=false;
+  if(k&&k.pc>0&&k.pv>0&&k.pc<k.pv){bid=k.pc;ask=k.pv;qb=k.qc;qa=k.qv;real=true}
+  else{bid=rd(it.px-t*(0.5+R()));ask=rd(it.px+t*(0.5+R()));if(bid<=0)bid=t;if(ask<=bid)ask=+(bid+t).toFixed(6)}
+  const scale=it.fixed?1000+R()*49000:100+R()*4900;
+  const q=()=>Math.max(1,Math.round(scale*(0.3+R()*1.2)));
+  const bids=[{p:bid,q:qb>0?qb:q()}],asks=[{p:ask,q:qa>0?qa:q()}];
+  for(let i=1;i<5;i++){
+    bids.push({p:Math.max(t,rd(bids[i-1].p-t*(1+R()*2))),q:q()});
+    asks.push({p:rd(asks[i-1].p+t*(1+R()*2)),q:q()});
+  }
+  return it._bk={key,bids,asks,bid,ask,real};
+}
 function positions(){
-  const P={};let realized=0;
+  const P={};const realized={ARS:0,USD:0};
   S.orders.filter(o=>o.status==='Ejecutada').sort((a,b)=>a.execTs-b.execTs).forEach(o=>{
-    const p=P[o.tk]||(P[o.tk]={tk:o.tk,qty:0,cost:0,first:o.execTs,type:o.type});
+    const p=P[o.tk]||(P[o.tk]={tk:o.tk,qty:0,cost:0,first:o.execTs,type:o.type,ccy:oc(o)});
     if(o.side==='C'){p.qty+=o.qty;p.cost+=o.total}
-    else{const avg=p.qty?p.cost/p.qty:0;realized+=o.total-avg*o.qty;p.cost-=avg*o.qty;p.qty-=o.qty;if(p.qty<=0){delete P[o.tk]}}
+    else{const avg=p.qty?p.cost/p.qty:0;realized[oc(o)]+=o.total-avg*o.qty;p.cost-=avg*o.qty;p.qty-=o.qty;if(p.qty<=0){delete P[o.tk]}}
   });
+  const mep=mepNow()||0;
   const rows=Object.values(P).filter(p=>p.qty>0).map(p=>{
     const it=MKT&&MKT.map[p.tk];const px=it?it.px:null;
     const val=it?gross(it,p.qty,px):null;
     const net=val==null?null:val*(1-feePct());
-    return {...p,it,px,avg:p.cost/p.qty,val,net,res:net==null?null:net-p.cost,resPct:net==null?null:(net/p.cost-1)*100};
+    const k=p.ccy==='USD'?mep:1;
+    return {...p,it,px,avg:p.cost/p.qty,val,net,res:net==null?null:net-p.cost,resPct:net==null?null:(net/p.cost-1)*100,valA:val==null?0:val*k,netA:net==null?0:net*k,costA:p.cost*k};
   });
   return {rows,realized};
 }
-function reserved(){let c=0;S.orders.filter(o=>o.status==='Pendiente'&&o.side==='C').forEach(o=>{c+=o.qty*o.limit/o.unit*(1+feePct())});return c}
-function pendingSell(tk){return S.orders.filter(o=>o.status==='Pendiente'&&o.side==='V'&&o.tk===tk).reduce((a,o)=>a+o.qty,0)}
-const available=()=>S.cash-reserved();
-function execute(o,it){
-  const px=it.px,g=gross(it,o.qty,px),fee=g*feePct();
-  o.price=px;o.gross=g;o.fee=fee;o.total=o.side==='C'?g+fee:g-fee;o.status='Ejecutada';o.execTs=Date.now();o.execDate=MKT.date;o.execNote=MKT.live?'precio del día '+MKT.live.hora:'cierre '+fdate(MKT.date);
-  S.cash+=o.side==='C'?-o.total:o.total;
+const reservedC=c=>S.orders.filter(o=>o.status==='Pendiente'&&o.side==='C'&&oc(o)===c).reduce((a,o)=>a+o.qty*o.limit/o.unit*(1+feePct()),0);
+const availableC=c=>cashOf(c)-reservedC(c);
+const pendingSell=tk=>S.orders.filter(o=>o.status==='Pendiente'&&o.side==='V'&&o.tk===tk).reduce((a,o)=>a+o.qty,0);
+function execute(o,it,px){
+  const g=gross(it,o.qty,px),fee=g*feePct();
+  o.price=px;o.gross=g;o.fee=fee;o.total=o.side==='C'?g+fee:g-fee;o.status='Ejecutada';o.execTs=Date.now();o.execDate=MKT.date;
+  o.execNote=MKT.live?'precio del día '+MKT.live.hora:'cierre '+fdate(MKT.date);
+  addCash(oc(o),o.side==='C'?-o.total:o.total);
 }
 function placeOrder(it,side,type,qty,limit,plazo){
   qty=Math.floor(qty);
   if(!(qty>=1))return {err:'La cantidad debe ser al menos 1.'};
-  const o={id:newId(),ts:Date.now(),tk:it.tk,name:it.name,type:it.type,unit:it.unit,side:side==='buy'?'C':'V',otype:type,qty,limit:type==='limitada'?limit:null,plazo,status:'Pendiente',dataDate:MKT.stamp||MKT.date};
   if(type==='limitada'&&!(limit>0))return {err:'Ingresá un precio límite válido.'};
-  const px=it.px,g=gross(it,qty,px),fee=g*feePct();
-  if(o.side==='C'){
-    const need=type==='limitada'?qty*limit/it.unit*(1+feePct()):g+fee;
-    if(need>available()+0.005)return {err:'No tenés efectivo suficiente. Disponible: '+money(available())+'.'};
-  }else{
-    const pos=positions().rows.find(r=>r.tk===it.tk);
-    const free=(pos?pos.qty:0)-pendingSell(it.tk);
-    if(qty>free)return {err:'No tenés tantas unidades para vender. Disponibles: '+fmt(Math.max(free,0),0)+'.'};
+  const ccy=ccyOf(it),bk=bookOf(it);
+  const o={id:newId(),ts:Date.now(),tk:it.tk,name:it.name,type:it.type,unit:it.unit,ccy,side:side==='buy'?'C':'V',otype:type,qty,limit:type==='limitada'?limit:null,plazo,status:'Pendiente',dataDate:(MKT.stamp||MKT.date)};
+  let motivo=null;
+  if(type==='limitada'&&Math.abs(limit/it.px-1)>BAND+1e-9)motivo='Precio fuera del rango permitido (±5% del último precio)';
+  if(!motivo){
+    if(o.side==='C'){
+      const px=type==='limitada'?limit:bk.ask,need=qty*px/it.unit*(1+feePct());
+      if(need>availableC(ccy)+0.005)motivo='Fondos insuficientes en '+(ccy==='USD'?'dólares':'pesos');
+    }else{
+      const pos=positions().rows.find(r=>r.tk===it.tk);
+      if(qty>(pos?pos.qty:0)-pendingSell(it.tk))motivo='Tenencia insuficiente para vender';
+    }
   }
-  const fills=type==='mercado'||(o.side==='C'?px<=limit:px>=limit);
-  if(fills)execute(o,it);
+  if(motivo){o.status='Rechazada';o.motivo=motivo}
+  else if(type==='mercado')execute(o,it,o.side==='C'?bk.ask:bk.bid);
   S.orders.unshift(o);persist();
   return {ok:true,order:o};
 }
@@ -317,14 +367,28 @@ function evalPending(){
   if(!MKT)return 0;let n=0;
   S.orders.filter(o=>o.status==='Pendiente').slice().reverse().forEach(o=>{
     const it=MKT.map[o.tk];if(!it||!((MKT.stamp||MKT.date)>o.dataDate))return;
-    const fills=o.side==='C'?it.px<=o.limit:it.px>=o.limit;
+    const bk=bookOf(it);
+    const fills=o.side==='C'?bk.ask<=o.limit:bk.bid>=o.limit;
     if(!fills)return;
-    if(o.side==='C'&&o.qty*it.px/o.unit*(1+feePct())>S.cash+0.005){o.status='Rechazada';return}
-    execute(o,it);n++;
+    const px=o.side==='C'?bk.ask:bk.bid;
+    if(o.side==='C'&&o.qty*px/o.unit*(1+feePct())>cashOf(oc(o))+0.005){o.status='Rechazada';o.motivo='Fondos insuficientes al ejecutarse';return}
+    execute(o,it,px);n++;
   });
   if(n)persist();return n;
 }
 function cancelOrder(id){const o=S.orders.find(x=>x.id===id);if(o&&o.status==='Pendiente'){o.status='Cancelada';persist();render()}}
+function doFx(dir,amt){
+  const mep=mepNow();if(!mep)return 'No hay cotización de dólar MEP disponible.';
+  if(!(amt>0))return 'Ingresá un monto mayor a cero.';
+  if(dir==='buy'){ // pesos -> dólares
+    if(amt>availableC('ARS')+0.005)return 'No tenés tantos pesos disponibles.';
+    S.cash-=amt;S.usd+=amt/mep;S.fxops.unshift({id:newId(),ts:Date.now(),from:'ARS',to:'USD',amtFrom:amt,amtTo:amt/mep,rate:mep});
+  }else{
+    if(amt>availableC('USD')+0.0001)return 'No tenés tantos dólares disponibles.';
+    S.usd-=amt;S.cash+=amt*mep;S.fxops.unshift({id:newId(),ts:Date.now(),from:'USD',to:'ARS',amtFrom:amt,amtTo:amt*mep,rate:mep});
+  }
+  persist();return null;
+}
 
 /* ===== PRECIO DEL DÍA (Rava, vía /api/rava) ===== */
 async function applyRava(m){
@@ -334,14 +398,25 @@ async function applyRava(m){
     const r=await fetch('/api/rava',{signal:ac.signal,cache:'no-store'});clearTimeout(to);
     if(!r.ok)throw 0;const j=await r.json();if(!j||!j.items)throw 0;
     let n=0,stamp='';
-    m.items.forEach(it=>{
-      const q=j.items[it.tk];if(!q||!(q.u>0))return;if(m.date&&q.f<m.date)return;
-      if(!it.base)it.base={px:it.px,prev:it.prev,open:it.open,hi:it.hi,lo:it.lo,vol:it.vol,amt:it.amt,ops:it.ops};
-      it.px=q.u;it.prev=q.a>0?q.a:it.base.px;it.live=true;
+    const upd=(it,q)=>{
+      if(!it.t0)it.t0={px:it.px,prev:it.prev,open:it.open,hi:it.hi,lo:it.lo,vol:it.vol,amt:it.amt,ops:it.ops};
+      it.px=q.u;it.prev=q.a>0?q.a:it.t0.px;it.live=true;it.derived=false;
+      if(q.pc>0&&q.pv>0&&q.pc<q.pv)it.bk={pc:q.pc,qc:q.qc,pv:q.pv,qv:q.qv};
       if(!it.fixed&&q.ap>0){it.open=q.ap;it.hi=q.mx;it.lo=q.mn;it.vol=q.nom;it.ops=q.ops}
       if(q.vol>0)it.amt=q.vol;
       const s=q.f+' '+q.h;if(s>stamp)stamp=s;n++;
+    };
+    const base=m.items.filter(i=>i.ccy!=='USD');
+    base.forEach(it=>{const q=j.items[it.tk];if(q&&q.c!=='USD'&&q.u>0&&!(m.date&&q.f<m.date))upd(it,q)});
+    base.forEach(it=>{
+      const tk=usdTk(it.tk);const q=j.items[tk];
+      if(!q||q.c!=='USD'||!(q.u>0)||(m.date&&q.f<m.date))return;
+      let tw=m.map[tk];
+      if(!tw){tw=makeTwin(it,q.u,q.a>0?q.a:q.u);m.items.push(tw);m.map[tk]=tw}
+      upd(tw,q);
     });
+    const a=j.items['AL30'],d=j.items['AL30D'];
+    if(a&&d&&a.u>0&&d.u>0)m.mep=a.u/d.u;
     if(n){m.live={stamp,hora:stamp.slice(11,16),n};m.stamp=stamp;return true}
   }catch(e){}
   return false;
@@ -375,7 +450,7 @@ async function loadMarket(force){
     else{MKT=null;mktState='fail'}
   }
   chipMkt();startLiveRefresh();
-  if(S){const n=evalPending();if(n)toast(n+(n>1?' órdenes pendientes se ejecutaron':' orden pendiente se ejecutó')+' con el último cierre.');render()}
+  if(S){const n=evalPending();if(n)toast(n+(n>1?' órdenes pendientes se ejecutaron':' orden pendiente se ejecutó')+'.');render()}
 }
 function chipMkt(){const c=$('#chipMkt');if(!c)return;
   if(mktState==='load'){c.className='chip warn';c.textContent='Cargando mercado…'}
@@ -385,7 +460,7 @@ function chipMkt(){const c=$('#chipMkt');if(!c)return;
 }
 
 /* ===== VISTAS ===== */
-let view='cuenta',panel='acc',search='',sortK='tk',sortD=1,limitRows=120;
+let view='cuenta',panel='acc',search='',sortK='tk',sortD=1,limitRows=120,monF='all';
 function render(){
   if(!S)return;
   $('#btnWho').textContent=(S.name?S.name+' · ':'')+S.code;
@@ -397,56 +472,65 @@ function noMkt(){return mktState==='fail'?'<div class="msg e">No pudimos leer el
 const TYPE_COL={'Acción':'#1D3343','CEDEAR':'#2f7fa5','ETF':'#7fb8cf','Bono soberano':'#035C80','Letra':'#e8a317','ON':'#7a5af8','Bono provincial':'#c46a3a'};
 function rCuenta(){
   const el=$('#v-cuenta');const {rows,realized}=positions();
-  const inv=rows.reduce((a,r)=>a+(r.val||0),0), invNet=rows.reduce((a,r)=>a+(r.net||0),0), cost=rows.reduce((a,r)=>a+r.cost,0);
-  const total=S.cash+invNet, res=total-S.startCash, resP=res/S.startCash*100;
+  const mep=mepNow();
+  const inv=rows.reduce((a,r)=>a+r.valA,0), invNet=rows.reduce((a,r)=>a+r.netA,0), cost=rows.reduce((a,r)=>a+r.costA,0);
+  const cashA=S.cash+S.usd*(mep||0);
+  const total=cashA+invNet, res=total-S.startCash, resP=res/S.startCash*100;
   const resPos=invNet-cost;
-  const alloc=Object.keys(TYPE_COL).map(t=>({t,v:rows.filter(r=>r.type===t).reduce((a,r)=>a+(r.val||0),0)})).filter(x=>x.v>0);
-  const tv=inv+S.cash;
-  el.innerHTML=`<h2>Mi cuenta</h2><div class="crumb">Resumen y detalle de cuenta${MKT?' · valuada al '+(MKT.live?'precio del día ('+MKT.live.hora+')':'cierre del '+fdate(MKT.date)):''}</div>${noMkt()}
+  const realA=realized.ARS+realized.USD*(mep||0);
+  const alloc=Object.keys(TYPE_COL).map(t=>({t,v:rows.filter(r=>r.type===t).reduce((a,r)=>a+r.valA,0)})).filter(x=>x.v>0);
+  const tv=inv+cashA||1;
+  el.innerHTML=`<h2>Mi cuenta</h2><div class="crumb">Resumen y detalle de cuenta${MKT?' · valuada al '+(MKT.live?'precio del día ('+MKT.live.hora+')':'cierre del '+fdate(MKT.date)):''}${mep?' · dólar MEP '+money(mep):''}</div>${noMkt()}
   <div class="grid4">
-   <div class="card kpi"><div class="l">Total valorizado</div><div class="v num">${money(total)}</div><div class="s ${cls(res)}">${pct(resP)} vs. capital inicial (${money(S.startCash)})</div></div>
-   <div class="card kpi"><div class="l">Efectivo disponible</div><div class="v num">${money(available())}</div><div class="s note">${reserved()>0?'Reservado en órdenes: '+money(reserved()):'Sin reservas'}</div></div>
+   <div class="card kpi"><div class="l">Total valorizado</div><div class="v num">${money(total)}</div><div class="s ${cls(res)}">${pct(resP)} vs. capital inicial (${money(S.startCash)})</div>${mep?`<div class="s note">≈ ${usd(total/mep)}</div>`:''}</div>
+   <div class="card kpi"><div class="l">Efectivo disponible</div><div class="v num" style="font-size:20px">${money(availableC('ARS'))}</div><div class="v num" style="font-size:20px">${usd(availableC('USD'))}</div><div class="s note">${reservedC('ARS')+reservedC('USD')>0?'Hay fondos reservados en órdenes pendientes':'Sin reservas'}</div><button class="btn sm g" id="btnFx" style="margin-top:8px">Cambiar pesos ↔ dólares</button></div>
    <div class="card kpi"><div class="l">Invertido (valuación)</div><div class="v num">${money(inv)}</div><div class="s ${cls(resPos)}">Resultado no realizado: ${money(resPos)}</div></div>
-   <div class="card kpi"><div class="l">Resultado realizado</div><div class="v num ${cls(realized)}">${money(realized)}</div><div class="s note">Por ventas ya hechas</div></div>
+   <div class="card kpi"><div class="l">Resultado realizado</div><div class="v num ${cls(realA)}">${money(realA)}</div><div class="s note">Por ventas ya hechas${realized.USD?' (incluye US$ '+fmt(realized.USD)+')':''}</div></div>
   </div>
-  ${alloc.length?`<div class="card" style="margin-bottom:18px"><h3>Composición de la cartera</h3><div class="bar">${alloc.concat([{t:'Efectivo',v:S.cash}]).map(x=>`<i style="width:${x.v/tv*100}%;background:${TYPE_COL[x.t]||'#c9d3da'}" title="${esc(x.t)}"></i>`).join('')}</div><div class="legend">${alloc.concat([{t:'Efectivo',v:S.cash}]).map(x=>`<span style="--c:${TYPE_COL[x.t]||'#c9d3da'}">${esc(x.t)} ${fmt(x.v/tv*100,1)}%</span>`).join('')}</div></div>`:''}
+  ${alloc.length?`<div class="card" style="margin-bottom:18px"><h3>Composición de la cartera</h3><div class="bar">${alloc.concat([{t:'Efectivo',v:cashA}]).map(x=>`<i style="width:${x.v/tv*100}%;background:${TYPE_COL[x.t]||'#c9d3da'}" title="${esc(x.t)}"></i>`).join('')}</div><div class="legend">${alloc.concat([{t:'Efectivo',v:cashA}]).map(x=>`<span style="--c:${TYPE_COL[x.t]||'#c9d3da'}">${esc(x.t)} ${fmt(x.v/tv*100,1)}%</span>`).join('')}</div></div>`:''}
   <h3 style="color:var(--navy);margin:6px 0 10px">Tenencia</h3>
-  ${rows.length?`<div class="tw"><table><thead><tr><th>Especie</th><th class="desc">Tipo</th><th>Cantidad</th><th>Precio prom. compra</th><th>Precio actual</th><th>Costo</th><th>Valuación</th><th>Resultado $</th><th>Resultado %</th><th>Desde</th><th></th></tr></thead><tbody>
-  ${rows.map(r=>`<tr class="row" data-tk="${esc(r.tk)}"><td class="tk">${esc(r.tk)}</td><td class="desc">${esc(r.type)}</td><td class="num">${fmt(r.qty,0)}</td><td class="num">${money(r.avg*(r.it?r.it.unit:1))}</td><td class="num">${r.it?money(r.px):'—'}</td><td class="num">${money(r.cost)}</td><td class="num">${money(r.val)}</td><td class="num ${cls(r.res)}">${money(r.res)}</td><td class="num ${cls(r.res)}">${pct(r.resPct)}</td><td class="num">${fdate(new Date(r.first).toISOString())}</td><td><button class="btn sm g" data-op="${esc(r.tk)}">Operar</button></td></tr>`).join('')}
-  </tbody></table></div><p class="note">Resultado = valuación al último precio (descontando comisión y derechos de venta) menos el costo de compra (con comisión y derechos). Para bonos, cantidad y precios se expresan por valor nominal (precio cada 100 VN).</p>`
+  ${rows.length?`<div class="tw"><table><thead><tr><th>Especie</th><th class="desc">Tipo</th><th>Cantidad</th><th>Precio prom. compra</th><th>Precio actual</th><th>Costo</th><th>Valuación</th><th>Resultado</th><th>Resultado %</th><th>Desde</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>`<tr class="row" data-tk="${esc(r.tk)}"><td class="tk">${esc(r.tk)}</td><td class="desc">${esc(r.type)}${r.ccy==='USD'?' · USD':''}</td><td class="num">${fmt(r.qty,0)}</td><td class="num">${moneyC(r.avg*(r.it?r.it.unit:1),r.ccy)}</td><td class="num">${r.it?pxs(r.it,r.px):'—'}</td><td class="num">${moneyC(r.cost,r.ccy)}</td><td class="num">${moneyC(r.val,r.ccy)}</td><td class="num ${cls(r.res)}">${moneyC(r.res,r.ccy)}</td><td class="num ${cls(r.res)}">${pct(r.resPct)}</td><td class="num">${fdate(new Date(r.first).toISOString())}</td><td><button class="btn sm g" data-op="${esc(r.tk)}">Operar</button></td></tr>`).join('')}
+  </tbody></table></div><p class="note">Resultado = valuación al último precio (descontando comisión y derechos de venta) menos el costo de compra (con comisión y derechos), en la moneda de cada especie. Los totales en pesos convierten los dólares al MEP. Para bonos, cantidad y precios se expresan por valor nominal (precio cada 100 VN).</p>`
   :`<div class="card empty">Todavía no tenés posiciones. Entrá a <b>Cotizaciones</b>, elegí un instrumento y hacé tu primera compra.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
   el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=e=>{if(e.target.closest('button'))return;openInst(tr.dataset.tk)});
   el.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>openInst(b.dataset.op,'sell'));
+  $('#btnFx').onclick=fxModal;
 }
 function go(v){view=v;render();window.scrollTo(0,0)}
 function panelItems(id){
   if(!MKT)return [];const t=TIPOS.find(x=>x.id===id).type;
-  return MKT.items.filter(i=>i.type===t);
+  return MKT.items.filter(i=>i.type===t&&(monF==='all'||ccyOf(i)===monF));
 }
 function rCot(){
   const el=$('#v-cot');
   const eq=['acc','ced','etf'].includes(panel);
-  const cols=eq?[['tk','Especie'],['name','Descripción'],['open','Apertura'],['lo','Mínimo'],['hi','Máximo'],['px','Cierre'],['prev','Cierre ant.'],['var','Var. %'],['vol','Volumen'],['amt','Monto $'],['ops','Ops.']]
+  const cols=eq?[['tk','Especie'],['name','Descripción'],['open','Apertura'],['lo','Mínimo'],['hi','Máximo'],['px','Último'],['prev','Cierre ant.'],['var','Var. %'],['vol','Volumen'],['amt','Monto'],['ops','Ops.']]
     :[['tk','Especie'],['name','Descripción'],['fv','Vto.'],['cur','Mon.'],['px','Precio c/100 VN'],['var','Var. %'],['ytm','TIR %'],['dm','Duration'],['par','Paridad'],['amt','Monto']];
   let it=panelItems(panel).map(i=>({...i,var:i.prev?(i.px/i.prev-1)*100:null,fv:i.bond&&i.bond.fv,ytm:i.bond&&i.bond.ytm,dm:i.bond&&i.bond.dm,par:i.bond&&i.bond.par}));
   if(search){const q=search.toLowerCase();it=it.filter(i=>(i.tk+' '+i.name).toLowerCase().includes(q))}
   it.sort((a,b)=>{const x=a[sortK],y=b[sortK];if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return (typeof x==='string'?x.localeCompare(y):x-y)*sortD});
   const total=it.length;it=it.slice(0,limitRows);
   const cell=(i,k)=>{
-    switch(k){case 'tk':return `<td class="tk">${esc(i.tk)}</td>`;case 'name':return `<td class="desc" title="${esc(i.name)}">${esc(i.name)}</td>`;
+    switch(k){case 'tk':return `<td class="tk">${esc(i.tk)}${ccyOf(i)==='USD'?' <span class="badge" style="background:#e0f0f7;color:#035C80">USD</span>':''}</td>`;
+      case 'name':return `<td class="desc" title="${esc(i.name)}">${esc(i.name)}</td>`;
       case 'var':return `<td class="num ${cls(i.var)}">${pct(i.var)}</td>`;
-      case 'vol':case 'ops':return `<td class="num">${fmt(i[k],0)}</td>`;case 'amt':return `<td class="num">${fmt(i.amt,0)}</td>`;
-      case 'fv':return `<td class="num">${fdate(i.fv)}</td>`;case 'cur':return `<td>${esc(i.cur||'')}</td>`;
+      case 'vol':case 'ops':return `<td class="num">${fmt(i[k],0)}</td>`;case 'amt':return `<td class="num">${ccyOf(i)==='USD'?fmt(i.amt,0):fmt(i.amt,0)}</td>`;
+      case 'fv':return `<td class="num">${fdate(i.fv)}</td>`;case 'cur':return `<td>${esc(ccyOf(i)==='USD'?'USD':(i.cur||''))}</td>`;
       case 'ytm':case 'dm':case 'par':return `<td class="num">${fmt(i[k],2)}</td>`;
+      case 'px':case 'open':case 'lo':case 'hi':case 'prev':return `<td class="num">${i[k]==null?'—':fmt(i[k],pdec(i))}</td>`;
       default:return `<td class="num">${fmt(i[k],2)}</td>`}
   };
-  el.innerHTML=`<h2>Cotizaciones</h2><div class="crumb">${MKT&&MKT.live?'Precios del día (Rava, demorados unos 20 minutos) · '+MKT.live.hora:'Precios de cierre del Tablero de BYMA'+(MKT?' · '+fdate(MKT.date):'')}. Tocá una especie para ver su panel y operar.</div>${noMkt()}
+  el.innerHTML=`<h2>Cotizaciones</h2><div class="crumb">${MKT&&MKT.live?'Precios del día (Rava, demorados unos 20 minutos) · '+MKT.live.hora:'Precios de cierre del Tablero de BYMA'+(MKT?' · '+fdate(MKT.date):'')}. Tocá una especie para ver su panel y operar. Las especies terminadas en D cotizan en dólares (MEP).</div>${noMkt()}
   <div class="pills">${TIPOS.map(t=>`<button class="pill ${t.id===panel?'on':''}" data-p="${t.id}">${t.label}</button>`).join('')}</div>
-  <div class="tools"><input id="q" placeholder="Buscar especie o nombre…" value="${esc(search)}"><span class="note">${total} instrumentos</span></div>
+  <div class="tools"><input id="q" placeholder="Buscar especie o nombre…" value="${esc(search)}">
+   <span class="pills" style="margin:0">${[['all','Todas'],['ARS','Pesos'],['USD','Dólares']].map(([k,l])=>`<button class="pill ${monF===k?'on':''}" data-m="${k}">${l}</button>`).join('')}</span>
+   <span class="note">${total} instrumentos</span></div>
   <div class="tw" style="max-height:68vh"><table><thead><tr>${cols.map(([k,l])=>`<th class="sortable ${k==='name'?'desc':''}" data-k="${k}">${l}${sortK===k?(sortD>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>
    ${it.map(i=>`<tr class="row" data-tk="${esc(i.tk)}">${cols.map(([k])=>cell(i,k)).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length}" class="empty">Sin resultados</td></tr>`}</tbody></table></div>
   ${total>limitRows?`<p style="text-align:center"><button class="btn g" id="more">Ver más (${total-limitRows} restantes)</button></p>`:''}`;
   el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{panel=b.dataset.p;sortK='tk';sortD=1;limitRows=120;rCot()});
+  el.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>{monF=b.dataset.m;limitRows=120;rCot()});
   el.querySelectorAll('th.sortable').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortK===k)sortD=-sortD;else{sortK=k;sortD=1}rCot()});
   el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>openInst(tr.dataset.tk));
   const q=$('#q');q.oninput=()=>{search=q.value;limitRows=120;const pos=q.selectionStart;rCot();const q2=$('#q');q2.focus();q2.setSelectionRange(pos,pos)};
@@ -454,28 +538,36 @@ function rCot(){
 }
 function rOrd(){
   const el=$('#v-ord');const O=S.orders;
-  const st={Ejecutada:'',Pendiente:'pend',Cancelada:'cx',Rechazada:'cx'};
+  const st={Ejecutada:'buy',Pendiente:'pend',Cancelada:'cx',Rechazada:'sell'};
+  const pr=o=>o.price!=null?moneyC(o.price,oc(o)):(o.limit?'lím. '+moneyC(o.limit,oc(o)):'—');
   el.innerHTML=`<h2>Órdenes</h2><div class="crumb">Historial de operaciones de tu cuenta</div>
-  <div class="msg i"><b>¿Cómo funciona una orden?</b> Una orden es la instrucción que enviás al mercado para comprar o vender. La <b>orden a mercado</b> se ejecuta de inmediato al último precio disponible (precio del día si está activo, o el cierre del Tablero); la <b>limitada</b> solo se ejecuta si el precio alcanza el que elegiste (compra: igual o menor; venta: igual o mayor) y, si no, queda <b>pendiente</b> y se evalúa en tus próximos ingresos.</div>
+  <div class="msg i"><b>¿Cómo funciona una orden?</b><br>
+  • <b>Ejecutada:</b> una orden <b>a mercado</b> con todo en orden se ejecuta de inmediato: la compra al precio de venta de la caja de puntas y la venta al precio de compra.<br>
+  • <b>Pendiente:</b> una orden <b>limitada</b> (hasta ±5% del último precio) queda pendiente. <b>Si el mercado alcanza el precio que ofreciste, se compra o se vende automáticamente</b> la próxima vez que se actualicen los precios.<br>
+  • <b>Rechazada:</b> si el precio está más de 5% por encima o por debajo del último precio, o no tenés fondos o tenencia suficiente, el sistema la rechaza automáticamente.</div>
   ${O.length?`<div class="tw"><table><thead><tr><th>Fecha/Hora</th><th>Especie</th><th>Operación</th><th>Tipo</th><th>Cantidad</th><th>Precio</th><th>Monto</th><th>Comisión</th><th>Total</th><th>Plazo</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${O.map(o=>`<tr><td class="num">${fts(o.ts)}</td><td class="tk">${esc(o.tk)}</td><td><span class="badge ${o.side==='C'?'buy':'sell'}">${o.side==='C'?'COMPRA':'VENTA'}</span></td><td>${o.otype==='limitada'?'Limitada':'Mercado'}</td><td class="num">${fmt(o.qty,0)}</td><td class="num">${o.price!=null?money(o.price):(o.limit?'lím. '+money(o.limit):'—')}</td><td class="num">${o.gross!=null?money(o.gross):'—'}</td><td class="num">${o.fee!=null?money(o.fee):'—'}</td><td class="num">${o.total!=null?money(o.total):'—'}</td><td>${esc(o.plazo)}</td><td><span class="badge ${st[o.status]||''}">${o.status}</span>${o.execDate?`<div class="note">${esc(o.execNote||'cierre '+fdate(o.execDate))}</div>`:''}</td><td>${o.status==='Pendiente'?`<button class="btn sm g" data-cx="${o.id}">Cancelar</button>`:''}</td></tr>`).join('')}
-  </tbody></table></div>`:`<div class="card empty">Todavía no hiciste ninguna operación.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
+  ${O.map(o=>`<tr><td class="num">${fts(o.ts)}</td><td class="tk">${esc(o.tk)}</td><td><span class="badge ${o.side==='C'?'buy':'sell'}">${o.side==='C'?'COMPRA':'VENTA'}</span></td><td>${o.otype==='limitada'?'Limitada':'Mercado'}</td><td class="num">${fmt(o.qty,0)}</td><td class="num">${pr(o)}</td><td class="num">${o.gross!=null?moneyC(o.gross,oc(o)):'—'}</td><td class="num">${o.fee!=null?moneyC(o.fee,oc(o)):'—'}</td><td class="num">${o.total!=null?moneyC(o.total,oc(o)):'—'}</td><td>${esc(o.plazo)}</td><td><span class="badge ${st[o.status]||''}">${o.status}</span>${o.execDate?`<div class="note">${esc(o.execNote||'cierre '+fdate(o.execDate))}</div>`:''}${o.motivo?`<div class="note" style="white-space:normal;max-width:210px;text-align:right">${esc(o.motivo)}</div>`:''}${o.status==='Pendiente'?`<div class="note" style="white-space:normal;max-width:210px;text-align:right">Se ejecuta si el precio alcanza ${pr(o)}</div>`:''}</td><td>${o.status==='Pendiente'?`<button class="btn sm g" data-cx="${o.id}">Cancelar</button>`:''}</td></tr>`).join('')}
+  </tbody></table></div>`:`<div class="card empty">Todavía no hiciste ninguna operación.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}
+  ${S.fxops.length?`<h3 style="color:var(--navy);margin:22px 0 10px">Cambios de moneda</h3><div class="tw"><table><thead><tr><th>Fecha/Hora</th><th>Operación</th><th>Entregaste</th><th>Recibiste</th><th>Dólar MEP</th></tr></thead><tbody>${S.fxops.map(f=>`<tr><td class="num">${fts(f.ts)}</td><td>${f.from==='ARS'?'Compra de dólares':'Venta de dólares'}</td><td class="num">${moneyC(f.amtFrom,f.from)}</td><td class="num">${moneyC(f.amtTo,f.to)}</td><td class="num">${money(f.rate)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
   el.querySelectorAll('[data-cx]').forEach(b=>b.onclick=()=>cancelOrder(b.dataset.cx));
 }
 function rGlo(){
   $('#v-glo').innerHTML=`<h2>Glosario</h2><div class="crumb">Términos que vas a ver en el simulador</div><div class="card"><dl class="gl">
-  <dt>Especie / Ticker</dt><dd>Código que identifica cada instrumento. Ej.: YPFD = acciones de YPF.</dd>
+  <dt>Especie / Ticker</dt><dd>Código que identifica cada instrumento. Ej.: YPFD = acciones de YPF en pesos. Si termina en D (AL30D, AAPLD) es la misma especie negociada en dólares (MEP).</dd>
+  <dt>Dólar MEP</dt><dd>Dólar que se obtiene comprando un activo en pesos y vendiéndolo en dólares. En el simulador podés cambiar pesos por dólares a la cotización MEP de referencia.</dd>
+  <dt>Caja de puntas</dt><dd>Muestra las mejores ofertas del mercado: cuántas unidades y a qué precio hay compradores (precio de compra) y vendedores (precio de venta). Si comprás a mercado, pagás el mejor precio de venta; si vendés, recibís el mejor precio de compra. La mejor punta puede venir del mercado y el resto del libro es simulado con fines educativos.</dd>
   <dt>Cierre y Cierre anterior</dt><dd>Último precio de la rueda y el de la rueda previa. La variación % compara ambos. Durante la rueda, el "precio del día" viene de Rava con unos 20 minutos de demora.</dd>
   <dt>Apertura, Mínimo y Máximo</dt><dd>Primer precio del día y los extremos que alcanzó durante la rueda.</dd>
-  <dt>Volumen y Monto</dt><dd>Cantidad de nominales operados y su valor total en pesos.</dd>
-  <dt>CEDEAR</dt><dd>Certificado que representa acciones de empresas del exterior y cotiza en pesos en Argentina.</dd>
+  <dt>Volumen y Monto</dt><dd>Cantidad de nominales operados y su valor total.</dd>
+  <dt>CEDEAR</dt><dd>Certificado que representa acciones de empresas del exterior y cotiza en Argentina.</dd>
   <dt>ETF</dt><dd>Fondo cotizado que replica un índice o canasta de activos.</dd>
   <dt>Obligación negociable (ON)</dt><dd>Bono emitido por una empresa para financiarse.</dd>
   <dt>Valor nominal (VN) y precio cada 100 VN</dt><dd>Los bonos y letras cotizan cada 100 de valor nominal. Si comprás 1.000 VN a un precio de 102.700 cada 100 VN, pagás $ 1.027.000.</dd>
   <dt>TIR</dt><dd>Tasa interna de retorno: rendimiento anual estimado si mantenés el bono hasta el vencimiento y cobrás todos los flujos.</dd>
   <dt>Duration</dt><dd>Plazo promedio de cobro de los flujos; mide cuánto cambia el precio ante cambios de tasa.</dd>
   <dt>Paridad</dt><dd>Precio del bono respecto de su valor técnico (capital más intereses corridos).</dd>
-  <dt>Orden a mercado / limitada</dt><dd>A mercado se ejecuta al precio disponible; limitada solo si se alcanza el precio que elegiste.</dd>
+  <dt>Orden a mercado</dt><dd>Se ejecuta ya, al mejor precio disponible en la caja de puntas.</dd>
+  <dt>Orden limitada</dt><dd>Vos elegís el precio. Queda pendiente y solo se ejecuta si el mercado alcanza ese precio. Debe estar dentro de ±5% del último precio; si no, se rechaza.</dd>
   <dt>PPC</dt><dd>Precio promedio de compra de tu tenencia, incluyendo comisiones.</dd>
   <dt>Comisión y derechos</dt><dd>Costos de operar: comisión del broker (${fmt(S.comPct,2)}%) y derechos de mercado (${fmt(DERECHOS,2)}%), en cada compra y venta.</dd>
   </dl></div>`;
@@ -494,8 +586,15 @@ function chartSVG(it,avg){
   return `<svg class="ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline fill="none" stroke="${col}" stroke-width="2" points="${pts}"/>
    <line x1="${pl}" x2="${W-pr}" y1="${y(mn)}" y2="${y(mn)}" stroke="#dfe5ea"/><line x1="${pl}" x2="${W-pr}" y1="${y(mx)}" y2="${y(mx)}" stroke="#dfe5ea"/>
    ${lbl(mx,y(mx))}${lbl(mn,y(mn))}
-   ${avg!=null?`<line x1="${pl}" x2="${W-pr}" y1="${y(avg)}" y2="${y(avg)}" stroke="#1D3343" stroke-dasharray="5 4"/><text x="${W-pr+6}" y="${y(avg)+4}" font-size="11" fill="#1D3343" font-family="monospace">PPC</text>`:''}
+   ${avg!=null?`<line x1="${pl}" x2="${W-pr}" y1="${y(avg)}" y2="${y(avg)}" stroke="#1D3343" stroke-dasharray="5 4"/><text x="${pl+4}" y="${y(avg)-4}" font-size="11" fill="#1D3343" font-family="monospace">PPC</text>`:''}
    <text x="${pl}" y="${H-3}" font-size="11" fill="#6b7c89">hace ${h.length} ruedas</text><text x="${W-pr}" y="${H-3}" font-size="11" fill="#6b7c89" text-anchor="end">precio actual</text></svg>`;
+}
+function bookHTML(it){
+  const b=bookOf(it),d=pdec(it);
+  const rows=b.bids.map((x,i)=>`<tr><td class="num">${fmt(x.q,0)}</td><td class="num up">${fmt(x.p,d)}</td><td class="num down">${fmt(b.asks[i].p,d)}</td><td class="num">${fmt(b.asks[i].q,0)}</td></tr>`).join('');
+  return `<h3 style="margin:14px 0 6px;color:var(--navy);font-size:15px">Caja de puntas</h3>
+  <div class="tw"><table class="bk"><thead><tr><th style="text-align:right">Cant. compra</th><th>Precio compra</th><th>Precio venta</th><th>Cant. venta</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <p class="note" style="margin:6px 0 0">${b.real?'La mejor punta (primera fila) viene del mercado; las otras cuatro son simuladas.':'Libro simulado con fines educativos, a partir del último precio.'}</p>`;
 }
 function bondInfo(it){
   const b=it.bond;if(!b)return '';
@@ -506,23 +605,23 @@ function bondInfo(it){
   ${(ren.length||amo.length)?`<h3 style="margin:14px 0 6px;color:var(--navy);font-size:14px">Próximos flujos</h3><div class="flows tw"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cada 100 VN</th></tr></thead><tbody>${ren.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Renta</td><td class="num">${fmt(r[1],3)}</td></tr>`).join('')}${amo.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Amortización</td><td class="num">${fmt(r[1],2)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
 function openInst(tk,sd){
-  if(!MKT||!MKT.map[tk]){toast('Ese instrumento no está en el último cierre.');return}
-  cur=tk;side=sd||'buy';otype='mercado';rangeN=126;drawModal();
+  if(!MKT||!MKT.map[tk]){toast('Ese instrumento no está en el último precio.');return}
+  cur=tk;side=sd||'buy';otype='mercado';rangeN=126;window._q='';window._l='';drawModal();
 }
 function closeModal(){$('#modalHost').innerHTML='';cur=null}
 function drawModal(){
   const it=MKT.map[cur];const pos=positions().rows.find(r=>r.tk===cur);
   const v=it.prev?(it.px/it.prev-1)*100:null;
   const st=(l,x)=>`<div class="stat"><div class="l">${l}</div><div class="v num">${x}</div></div>`;
-  const eq=!it.fixed;
+  const eq=!it.fixed,c=ccyOf(it),pm=n=>n==null?'—':pxs(it,n);
   $('#modalHost').innerHTML=`<div class="ov" id="ov"><div class="modal">
-   <div class="mh"><div><div class="t">${esc(it.tk)} <span class="badge">${esc(it.type)}</span></div><div class="d">${esc(it.name)}${it.sector?' · '+esc(it.sector):''}</div></div>
-    <div style="margin-left:auto;text-align:right"><div class="num" style="font-size:24px;font-weight:800;color:var(--navy)">${money(it.px)}</div><div class="num ${cls(v)}">${pct(v)} <span class="note">${it.fixed?'cada 100 VN':''}</span></div></div>
+   <div class="mh"><div><div class="t">${esc(it.tk)} <span class="badge">${esc(it.type)}</span>${c==='USD'?' <span class="badge" style="background:#e0f0f7;color:#035C80">USD</span>':''}</div><div class="d">${esc(it.name)}${it.sector?' · '+esc(it.sector):''}</div></div>
+    <div style="margin-left:auto;text-align:right"><div class="num" style="font-size:24px;font-weight:800;color:var(--navy)">${pm(it.px)}</div><div class="num ${cls(v)}">${pct(v)} <span class="note">${it.fixed?'cada 100 VN':''}</span></div></div>
     <button class="x" id="mx">×</button></div>
    <div class="mbody"><div class="mleft">
-    ${eq?`<div class="stats">${st('Apertura',money(it.open))}${st('Mínimo',money(it.lo))}${st('Máximo',money(it.hi))}${st('Cierre ant.',money(it.prev))}${st('Volumen',fmt(it.vol,0))}${st('Monto',abbr(it.amt))}${st('Operaciones',fmt(it.ops,0))}${it.beta!=null?st('Beta',fmt(it.beta)):''}${it.ratio?st('Ratio',esc(it.ratio)):''}</div>
-    <div class="rng">${[[21,'1 mes'],[63,'3 meses'],[126,'6 meses']].map(([n,l])=>`<button class="pill ${rangeN===n?'on':''}" data-r="${n}">${l}</button>`).join('')}</div>${chartSVG(it,pos?pos.avg:null)}
-    <p class="note">Serie de cierres diarios del Tablero de BYMA${pos?'. La línea punteada es tu precio promedio de compra (PPC).':'.'}</p>`:bondInfo(it)}
+    ${eq?`<div class="stats">${st('Apertura',pm(it.open))}${st('Mínimo',pm(it.lo))}${st('Máximo',pm(it.hi))}${st('Cierre ant.',pm(it.prev))}${st('Volumen',fmt(it.vol,0))}${st('Monto',abbr(it.amt))}${st('Operaciones',fmt(it.ops,0))}${it.beta!=null?st('Beta',fmt(it.beta)):''}${it.ratio?st('Ratio',esc(it.ratio)):''}</div>
+    ${it.h.length?`<div class="rng">${[[21,'1 mes'],[63,'3 meses'],[126,'6 meses']].map(([n,l])=>`<button class="pill ${rangeN===n?'on':''}" data-r="${n}">${l}</button>`).join('')}</div>${chartSVG(it,pos&&pos.ccy===c?pos.avg:null)}<p class="note">Serie de cierres diarios del Tablero de BYMA${pos?'. La línea punteada es tu precio promedio de compra (PPC).':'.'}</p>`:`<div class="msg i">Las especies en dólares no tienen serie histórica en el tablero; mirá la de su versión en pesos (${esc(it.twinOf||'')}).</div>`}`:bondInfo(it)}
+    ${bookHTML(it)}
    </div><div class="mright" id="tkt"></div></div></div></div>`;
   $('#mx').onclick=closeModal;$('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
   document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{rangeN=+b.dataset.r;drawModal()});
@@ -530,41 +629,65 @@ function drawModal(){
 }
 function drawTicket(){
   const it=MKT.map[cur];const pos=positions().rows.find(r=>r.tk===cur);
-  const holding=pos?pos.qty-pendingSell(cur):0;
+  const holding=pos?pos.qty-pendingSell(cur):0;const c=ccyOf(it),bk=bookOf(it),d=pdec(it);
   const t=$('#tkt');
   t.innerHTML=`<h3 style="margin:0 0 10px;color:var(--navy)">Nueva orden</h3>
+  <div class="pq"><div><span>Últ. precio compra</span><b class="num up">${fmt(bk.bid,d)}</b></div><div><span>Últ. precio venta</span><b class="num down">${fmt(bk.ask,d)}</b></div></div>
   <div class="seg"><button class="b ${side==='buy'?'on':''}" data-s="buy">COMPRA</button><button class="s ${side==='sell'?'on':''}" data-s="sell">VENTA</button></div>
   <label class="field"><span>Tipo de orden</span><select id="tOt"><option value="mercado" ${otype==='mercado'?'selected':''}>Mercado</option><option value="limitada" ${otype==='limitada'?'selected':''}>Limitada</option></select></label>
   <label class="field"><span>${it.fixed?'Cantidad (valor nominal)':'Cantidad'}</span><div class="qty"><button id="qm">−</button><input id="tQ" type="number" min="1" step="1" value="${window._q||''}" placeholder="0"><button id="qp">+</button></div></label>
   <div class="note" style="margin:-6px 0 10px">${side==='buy'?'Máx. comprable: <a href="#" id="tMax">'+fmt(maxBuy(it),0)+'</a>':'Tenencia disponible: <a href="#" id="tMax">'+fmt(holding,0)+'</a>'}</div>
-  ${otype==='limitada'?`<label class="field"><span>Precio límite${it.fixed?' (cada 100 VN)':''}</span><input id="tL" type="number" step="0.01" value="${window._l||it.px}"></label>`:''}
+  ${otype==='limitada'?`<label class="field"><span>Precio límite${it.fixed?' (cada 100 VN)':''} · ${c==='USD'?'US$':'$'}</span><input id="tL" type="number" step="any" value="${window._l||it.px}"></label>
+  <div class="qty" style="margin:-4px 0 6px"><button class="lim" data-k="-5">−5%</button><button class="lim" data-k="0" style="width:auto;padding:0 12px;font-size:13px">Último</button><button class="lim" data-k="5">+5%</button></div>
+  <div class="note" id="tRng" style="margin-bottom:10px"></div>`:''}
   <label class="field"><span>Plazo</span><select id="tP"><option>CI</option><option selected>24hs</option></select></label>
   <div class="sum" id="tSum"></div><div id="tMsg"></div>
   <button class="btn ${side==='buy'?'grn':'red'}" id="tGo" style="width:100%">${side==='buy'?'COMPRAR':'VENDER'}</button>
-  <p class="note" style="margin-top:10px">Efectivo disponible: <b>${money(available())}</b>${pos?' · Tenés '+fmt(pos.qty,0)+' (PPC '+money(pos.avg*it.unit)+(it.fixed?' c/100 VN':'')+')':''}</p>`;
-  t.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{side=b.dataset.s;drawTicket()});
+  <p class="note" style="margin-top:10px">Efectivo disponible: <b>${moneyC(availableC(c),c)}</b>${pos?' · Tenés '+fmt(pos.qty,0)+' (PPC '+moneyC(pos.avg*it.unit,c)+(it.fixed?' c/100 VN':'')+')':''}</p>`;
+  t.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{side=b.dataset.s;window._q=$('#tQ').value;drawTicket()});
   $('#tOt').onchange=e=>{otype=e.target.value;window._q=$('#tQ').value;drawTicket()};
   const q=$('#tQ');q.oninput=sum;$('#qm').onclick=()=>{q.value=Math.max(0,(+q.value||0)-(it.fixed?100:1));sum()};$('#qp').onclick=()=>{q.value=(+q.value||0)+(it.fixed?100:1);sum()};
-  const L=$('#tL');if(L)L.oninput=()=>{window._l=L.value;sum()};
+  const L=$('#tL');if(L){L.oninput=()=>{window._l=L.value;sum()};t.querySelectorAll('.lim').forEach(b=>b.onclick=()=>{const v=it.px*(1+(+b.dataset.k)/100);L.value=+v.toFixed(it.px<10?4:2);window._l=L.value;sum()})}
   $('#tMax').onclick=e=>{e.preventDefault();q.value=side==='buy'?maxBuy(it):holding;sum()};
   $('#tGo').onclick=submit;sum();
 }
-function maxBuy(it){const px=otype==='limitada'&&window._l>0?+window._l:it.px;return Math.max(0,Math.floor(available()/(px/it.unit*(1+feePct()))))}
+function maxBuy(it){const bk=bookOf(it);const px=otype==='limitada'&&window._l>0?+window._l:bk.ask;return Math.max(0,Math.floor(availableC(ccyOf(it))/(px/it.unit*(1+feePct()))))}
 function sum(){
-  const it=MKT.map[cur];const q=Math.floor(+$('#tQ').value||0);window._q=$('#tQ').value;
+  const it=MKT.map[cur];const q=Math.floor(+$('#tQ').value||0);window._q=$('#tQ').value;const c=ccyOf(it),bk=bookOf(it);
   const L=$('#tL');const lim=L?+L.value:null;
-  const px=otype==='limitada'&&lim>0?lim:it.px;const g=q*px/it.unit,fee=g*feePct(),tot=side==='buy'?g+fee:g-fee;
-  const fillsNow=otype==='mercado'||(side==='buy'?it.px<=lim:it.px>=lim);
-  $('#tSum').innerHTML=`<div><span>Precio ${otype==='mercado'?'('+priceLbl().toLowerCase()+')':'límite'}</span><span class="num">${money(px)}</span></div><div><span>Monto</span><span class="num">${money(g)}</span></div><div><span>Comisión + derechos (${fmt(feePct()*100,2)}%)</span><span class="num">${money(fee)}</span></div><div class="tot"><span>${side==='buy'?'Total a pagar':'Total a recibir'}</span><span class="num">${money(tot)}</span></div>`;
-  $('#tMsg').innerHTML=otype==='limitada'?`<div class="msg ${fillsNow?'o':'w'}">${fillsNow?'Con el precio actual esta orden se ejecutaría ahora.':'El precio actual ('+money(it.px)+') no alcanza tu precio: la orden quedará pendiente y se evalúa cuando vuelvas a ingresar con un precio nuevo.'}</div>`:'';
+  const px=otype==='limitada'&&lim>0?lim:(side==='buy'?bk.ask:bk.bid);
+  const g=q*px/it.unit,fee=g*feePct(),tot=side==='buy'?g+fee:g-fee;
+  $('#tSum').innerHTML=`<div><span>Precio ${otype==='mercado'?'('+(side==='buy'?'punta de venta':'punta de compra')+')':'límite'}</span><span class="num">${pxs(it,px)}</span></div><div><span>Monto</span><span class="num">${moneyC(g,c)}</span></div><div><span>Comisión + derechos (${fmt(feePct()*100,2)}%)</span><span class="num">${moneyC(fee,c)}</span></div><div class="tot"><span>${side==='buy'?'Total a pagar':'Total a recibir'}</span><span class="num">${moneyC(tot,c)}</span></div>`;
+  const r=$('#tRng');
+  if(r){const lo=it.px*(1-BAND),hi=it.px*(1+BAND);r.textContent='Rango permitido: '+pxs(it,lo)+' a '+pxs(it,hi)+' (±5% del último precio, '+pxs(it,it.px)+').'}
+  let m='';
+  if(otype==='mercado')m=`<div class="msg i">Se ejecuta ahora a ${side==='buy'?'la punta de venta':'la punta de compra'} (${pxs(it,px)}).</div>`;
+  else if(!(lim>0))m='';
+  else if(Math.abs(lim/it.px-1)>BAND+1e-9)m='<div class="msg e">Ese precio está a más de 5% del último precio: la orden será <b>rechazada</b> automáticamente.</div>';
+  else m=`<div class="msg w">La orden quedará <b>pendiente</b>. Si el mercado alcanza el precio que ofreciste (${side==='buy'?'el precio de venta baja hasta tu límite':'el precio de compra sube hasta tu límite'}), se ${side==='buy'?'compra':'vende'} automáticamente.</div>`;
+  $('#tMsg').innerHTML=m;
 }
 function submit(){
   const it=MKT.map[cur];const q=+$('#tQ').value;const L=$('#tL');
   const r=placeOrder(it,side,otype,q,L?+L.value:null,$('#tP').value);
   if(r.err){$('#tMsg').innerHTML='<div class="msg e">'+esc(r.err)+'</div>';return}
   const o=r.order;window._q='';window._l='';
-  toast(o.status==='Ejecutada'?(o.side==='C'?'Compra ejecutada: ':'Venta ejecutada: ')+fmt(o.qty,0)+' '+o.tk+' a '+money(o.price):'Orden limitada registrada como pendiente.');
+  toast(o.status==='Ejecutada'?(o.side==='C'?'Compra ejecutada: ':'Venta ejecutada: ')+fmt(o.qty,0)+' '+o.tk+' a '+pxs(it,o.price):o.status==='Pendiente'?'Orden limitada pendiente: se ejecuta si el precio alcanza '+pxs(it,o.limit)+'.':'Orden rechazada: '+o.motivo+'.');
   closeModal();render();
+}
+function fxModal(){
+  const mep=mepNow();const h=$('#modalHost');
+  h.innerHTML=`<div class="ov" id="ov"><div class="modal" style="max-width:460px"><div class="mh"><div><div class="t" style="font-size:20px">Cambiar pesos ↔ dólares</div><div class="d">Dólar MEP de referencia: ${mep?money(mep):'no disponible'}</div></div><button class="x" id="mx">×</button></div><div style="padding:18px 22px">
+  <div class="seg"><button class="b ${window._fx!=='sell'?'on':''}" data-d="buy">COMPRAR USD</button><button class="s ${window._fx==='sell'?'on':''}" data-d="sell">VENDER USD</button></div>
+  <label class="field"><span id="fxl">${window._fx==='sell'?'Dólares a vender (US$)':'Pesos a entregar ($)'}</span><input id="fxA" type="number" min="0" step="any"></label>
+  <div class="sum" id="fxS"></div><div id="fxM"></div>
+  <p class="note">Disponible: ${money(availableC('ARS'))} · ${usd(availableC('USD'))}. Se convierte al dólar MEP de referencia, sin comisión (simplificado). Los dólares sirven para operar las especies terminadas en D.</p>
+  <button class="btn y" id="fxGo" style="width:100%">Confirmar</button></div></div></div>`;
+  const upd=()=>{const a=+$('#fxA').value||0,sell=window._fx==='sell';$('#fxS').innerHTML=mep?`<div><span>Recibís</span><span class="num tot">${sell?money(a*mep):usd(a/mep)}</span></div>`:''};
+  $('#mx').onclick=()=>{h.innerHTML=''};$('#ov').onclick=e=>{if(e.target.id==='ov')h.innerHTML=''};
+  h.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{window._fx=b.dataset.d;fxModal()});
+  $('#fxA').oninput=upd;upd();
+  $('#fxGo').onclick=()=>{const e=doFx(window._fx==='sell'?'sell':'buy',+$('#fxA').value);if(e){$('#fxM').innerHTML='<div class="msg e">'+esc(e)+'</div>';return}h.innerHTML='';render();toast('Cambio realizado')};
 }
 
 /* ===== SESIÓN ===== */
@@ -574,7 +697,7 @@ function exportFile(){
   a.href=URL.createObjectURL(b);a.download='mi-cartera-'+S.code+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
 }
 async function startSession(st){
-  S=st;LS.set('sim.last',S.code);saveLocal();
+  S=migrate(st);LS.set('sim.last',S.code);saveLocal();
   if(backend){setSync('pend');pushNow()}else setSync('');
   showApp();
   if(MKT){if(evalPending())render()}else if(mktState!=='load')loadMarket();
@@ -620,7 +743,7 @@ function menu(){
   $('#mCom').onchange=e=>{const v=Math.max(0,Math.min(5,+e.target.value||0));S.comPct=v;persist();render();toast('Comisión actualizada')};
   $('#mExp').onclick=exportFile;$('#mRef').onclick=()=>{h.innerHTML='';loadMarket()};
   $('#mOut').onclick=()=>{h.innerHTML='';S=null;$('#app').classList.add('hide');$('#login').classList.remove('hide');$('#lgMain').classList.remove('hide');$('#lgCode').classList.add('hide');$('#inCode').value=LS.get('sim.last')||''};
-  $('#mReset').onclick=()=>{if(!confirm('Se borran todas tus operaciones y volvés al capital inicial. ¿Seguro?'))return;S.orders=[];S.cash=S.startCash;persist();h.innerHTML='';render();toast('Cuenta reiniciada')};
+  $('#mReset').onclick=()=>{if(!confirm('Se borran todas tus operaciones y volvés al capital inicial. ¿Seguro?'))return;S.orders=[];S.fxops=[];S.cash=S.startCash;S.usd=0;persist();h.innerHTML='';render();toast('Cuenta reiniciada')};
 }
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>go(b.dataset.v));
 $('#btnWho').onclick=menu;
