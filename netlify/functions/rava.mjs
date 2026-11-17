@@ -1,5 +1,6 @@
 // Precios del día (demorados) leídos del servicio público de Rava Mercado.
-// Devuelve solo instrumentos en pesos, eligiendo el plazo más líquido (48hs > 24hs > CI).
+// Devuelve instrumentos en pesos (ARS) y en dólares MEP (USD), con las puntas (mejor compra y venta),
+// eligiendo el plazo más líquido (48hs > 24hs > CI).
 const SRC = "https://mercado.rava.com/api/prices/arg";
 const ORDER = [2, 1, 0];
 let cache = null;
@@ -30,7 +31,7 @@ export default async () => {
     const j = await r.json();
     const best = {};
     for (const x of j.datos || []) {
-      if (x.moneda !== "ARS" || !x.simbolo) continue;
+      if ((x.moneda !== "ARS" && x.moneda !== "USD") || !x.simbolo) continue;
       const u = num(x.ultimo);
       if (!(u > 0)) continue;
       const rank = ORDER.indexOf(x.plazo);
@@ -38,7 +39,7 @@ export default async () => {
       const cur = best[x.simbolo];
       if (cur && cur.rank <= rank) continue;
       best[x.simbolo] = {
-        rank, u, a: num(x.anterior), ap: num(x.apertura), mx: num(x.maximo), mn: num(x.minimo),
+        rank, c: x.moneda, pc: num(x.preciocompra), qc: num(x.cantcompra), pv: num(x.precioventa), qv: num(x.cantventa), u, a: num(x.anterior), ap: num(x.apertura), mx: num(x.maximo), mn: num(x.minimo),
         v: num(x.variacion), nom: num(x.volnominal), vol: num(x.volefectivo), ops: num(x.operaciones),
         f: String(x.fecha).slice(0, 10), h: x.hora || "",
       };
