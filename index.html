@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador de inversiones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#153244;--navy2:#1f4560;--yellow:#FFCC00;--mint:#8DE2D6;--bg:#f4f6f8;--card:#fff;--line:#dfe5ea;--txt:#1b2a35;--mut:#6b7c89;--up:#0f9d58;--down:#d93025;--warn:#b26a00;--mono:'JetBrains Mono',ui-monospace,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:'Archivo',system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--txt);font-size:15px;line-height:1.45}
+button{font-family:inherit;cursor:pointer}
+input,select{font-family:inherit;font-size:15px}
+.hide{display:none!important}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.up{color:var(--up)}.down{color:var(--down)}
+/* login */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(160deg,var(--navy) 0,var(--navy2) 100%)}
+.lbox{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:32px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.lbox h1{margin:0 0 4px;font-size:26px;color:var(--navy)}
+.lbox p.sub{margin:0 0 20px;color:var(--mut)}
+.field{display:block;margin-bottom:14px}
+.field span{display:block;font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+.field input,.field select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--txt)}
+.field input:focus,.field select:focus{outline:none;border-color:var(--navy)}
+.btn{border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:15px;background:var(--navy);color:#fff}
+.btn:hover{background:var(--navy2)}
+.btn.y{background:var(--yellow);color:var(--navy)}.btn.y:hover{background:#f2c200}
+.btn.g{background:#fff;color:var(--navy);border:1.5px solid var(--line)}.btn.g:hover{background:var(--bg)}
+.btn.red{background:var(--down)}.btn.grn{background:var(--up)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:6px 12px;font-size:13px;border-radius:8px}
+.or{text-align:center;color:var(--mut);margin:18px 0;font-size:13px}
+.codebox{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:.08em;background:var(--bg);border:2px dashed var(--navy);border-radius:12px;padding:16px;text-align:center;color:var(--navy);margin:12px 0}
+.note{font-size:13px;color:var(--mut)}
+.err{color:var(--down);font-size:14px;margin:8px 0}
+/* app shell */
+header{background:var(--navy);color:#fff;position:sticky;top:0;z-index:30}
+.hrow{display:flex;align-items:center;gap:14px;padding:10px 20px;flex-wrap:wrap}
+.brand{font-weight:800;font-size:18px;letter-spacing:.02em}
+.brand b{color:var(--yellow)}
+nav{display:flex;gap:4px;margin-left:12px;flex-wrap:wrap}
+nav button{background:none;border:0;color:#cfe0ea;padding:8px 14px;border-radius:8px;font-weight:600;font-size:14px}
+nav button.on{background:var(--yellow);color:var(--navy)}
+nav button:hover:not(.on){background:rgba(255,255,255,.1)}
+.sp{flex:1}
+.chip{font-size:12px;padding:4px 10px;border-radius:99px;background:rgba(255,255,255,.12);color:#fff;white-space:nowrap}
+.chip.ok::before{content:'●';color:#4cd98a;margin-right:6px}
+.chip.warn::before{content:'●';color:var(--yellow);margin-right:6px}
+.chip.bad::before{content:'●';color:#ff6b5e;margin-right:6px}
+.who{background:rgba(255,255,255,.1);border:0;color:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:20px}
+h2{margin:0 0 4px;font-size:22px;color:var(--navy)}
+.crumb{color:var(--mut);font-size:13px;margin-bottom:16px}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.kpi .l{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font-size:24px;font-weight:800;color:var(--navy);margin-top:4px}
+.kpi .s{font-size:13px;margin-top:2px}
+.card h3{margin:0 0 12px;font-size:16px;color:var(--navy)}
+.tw{overflow:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{background:#eef2f5;color:var(--mut);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;text-align:right;padding:9px 12px;white-space:nowrap;position:sticky;top:0;user-select:none}
+th:first-child,td:first-child{text-align:left}
+th.sortable{cursor:pointer}th.sortable:hover{color:var(--navy)}
+td{padding:9px 12px;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+tr.row{cursor:pointer}tr.row:hover td{background:#f7fafc}
+td.tk{font-weight:800;color:var(--navy)}
+td.desc{text-align:left;color:var(--mut);max-width:260px;overflow:hidden;text-overflow:ellipsis}
+th.desc,.flows th:nth-child(2){text-align:left}
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.tools input{padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;min-width:240px}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.pill{border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:6px 14px;font-weight:600;font-size:13px;color:var(--navy)}
+.pill.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#e8eef2;color:var(--navy)}
+.badge.buy{background:#e0f5ea;color:var(--up)}.badge.sell{background:#fde8e6;color:var(--down)}
+.badge.pend{background:#fff3d6;color:var(--warn)}.badge.cx{background:#eceff1;color:var(--mut)}
+.empty{padding:36px;text-align:center;color:var(--mut)}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:#eef2f5;margin:8px 0}
+.bar i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px}
+.legend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:6px}
+/* modal */
+.ov{position:fixed;inset:0;background:rgba(10,25,35,.55);z-index:50;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px}
+.modal{background:#fff;border-radius:16px;max-width:1040px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.mh{display:flex;gap:14px;align-items:flex-start;padding:18px 22px;border-bottom:1px solid var(--line)}
+.mh .t{font-size:24px;font-weight:800;color:var(--navy)}
+.mh .d{color:var(--mut);font-size:14px}
+.mh .x{margin-left:auto;background:none;border:0;font-size:26px;color:var(--mut);line-height:1}
+.mbody{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,1fr);gap:0}
+.mleft{padding:18px 22px;border-right:1px solid var(--line);min-width:0}
+.mright{padding:18px 22px;background:#fafcfd;border-radius:0 0 16px 0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.stat{background:var(--bg);border-radius:10px;padding:9px 12px}
+.stat .l{font-size:11px;font-weight:700;color:var(--mut);text-transform:uppercase}
+.stat .v{font-weight:700;color:var(--navy);margin-top:2px}
+.rng{display:flex;gap:6px;margin:6px 0}
+svg.ch{width:100%;height:210px;display:block}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-bottom:12px;border-radius:10px;overflow:hidden;border:1.5px solid var(--line)}
+.seg button{border:0;padding:10px;font-weight:800;background:#fff;color:var(--mut)}
+.seg button.on.b{background:var(--up);color:#fff}.seg button.on.s{background:var(--down);color:#fff}
+.seg button.on.m{background:var(--navy);color:#fff}
+.qty{display:flex;gap:6px}.qty input{flex:1;text-align:center}.qty button{width:42px;border:1.5px solid var(--line);background:#fff;border-radius:10px;font-size:18px;font-weight:700}
+.sum{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px;margin:12px 0;font-size:14px}
+.sum div{display:flex;justify-content:space-between;padding:3px 0}
+.sum .tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:800;color:var(--navy);font-size:16px}
+.msg{padding:10px 12px;border-radius:10px;font-size:13.5px;margin:10px 0}
+.msg.i{background:#e8f4fb;color:#12506f}.msg.w{background:#fff3d6;color:#7a4a00}.msg.e{background:#fde8e6;color:#9b1c13}.msg.o{background:#e0f5ea;color:#0b6b3a}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:12px 20px;border-radius:12px;z-index:90;font-weight:600;box-shadow:0 8px 30px rgba(0,0,0,.3);max-width:92vw}
+.flows{max-height:220px;overflow:auto}
+.gl dt{font-weight:800;color:var(--navy);margin-top:14px}.gl dd{margin:2px 0 0;color:var(--txt)}
+@media(max-width:820px){.mbody{grid-template-columns:1fr}.mleft{border-right:0;border-bottom:1px solid var(--line)}main{padding:12px}.hrow{padding:10px 12px}nav{margin-left:0;width:100%}}
+</style>
+</head>
+<body>
+<div id="login">
+ <div class="lbox">
+  <h1>Simulador de inversiones</h1>
+  <p class="sub">Comprá y vendé acciones, CEDEARs, ETF, bonos y ONs con dinero virtual. Tu cartera queda guardada con tu código personal.</p>
+  <div id="lgMain">
+   <div id="lgCreate">
+    <label class="field"><span>Tu nombre (opcional)</span><input id="inName" maxlength="40" placeholder="Ej: Ana"></label>
+    <label class="field"><span>Capital inicial virtual</span>
+      <select id="inCash"><option value="1000000">$ 1.000.000</option><option value="5000000">$ 5.000.000</option><option value="10000000" selected>$ 10.000.000</option><option value="50000000">$ 50.000.000</option></select></label>
+    <button class="btn y" id="btnCreate" style="width:100%">Crear mi cuenta</button>
+   </div>
+   <div class="or">— o —</div>
+   <label class="field"><span>Ya tengo mi código</span><input id="inCode" placeholder="XXXX-XXXX-XXXX" autocomplete="off" style="font-family:var(--mono);letter-spacing:.06em"></label>
+   <button class="btn" id="btnEnter" style="width:100%">Ingresar</button>
+   <div class="err" id="lgErr"></div>
+   <p class="note" id="lgNote"></p>
+   <p class="note" style="margin-top:14px">También podés <a href="#" id="lnkImport">importar un archivo de respaldo</a>.<input type="file" id="fileImport" accept=".json" class="hide"></p>
+  </div>
+  <div id="lgCode" class="hide">
+   <h2>¡Cuenta creada!</h2>
+   <p>Este es tu <b>código personal</b>. Guardalo: con él entrás desde cualquier dispositivo y ves tu tenencia y tus resultados.</p>
+   <div class="codebox" id="codeShow"></div>
+   <div style="display:flex;gap:8px;margin-bottom:14px"><button class="btn g" id="btnCopy">Copiar código</button><button class="btn g" id="btnExp0">Descargar respaldo</button></div>
+   <button class="btn y" id="btnGo" style="width:100%">Empezar a operar</button>
+  </div>
+ </div>
+</div>
+
+<div id="app" class="hide">
+ <header><div class="hrow">
+  <div class="brand">SIMU<b>LADOR</b> de inversiones</div>
+  <nav id="nav">
+   <button data-v="cuenta" class="on">Mi cuenta</button>
+   <button data-v="cot">Cotizaciones</button>
+   <button data-v="ord">Órdenes</button>
+   <button data-v="glo">Glosario</button>
+  </nav>
+  <div class="sp"></div>
+  <span class="chip warn" id="chipMkt">Cargando mercado…</span>
+  <span class="chip" id="chipSync"></span>
+  <button class="who" id="btnWho">—</button>
+ </div></header>
+ <main>
+  <section id="v-cuenta"></section>
+  <section id="v-cot" class="hide"></section>
+  <section id="v-ord" class="hide"></section>
+  <section id="v-glo" class="hide"></section>
+ </main>
+</div>
+<div id="modalHost"></div>
+<div id="toastHost"></div>
+<script>
+/* ===== MERCADO: lectura del Tablero BYMA y normalización ===== */
+const TABLERO='https://tablero.bymaeduca.com.ar';
+const TIPOS=[
+  {id:'acc',label:'Acciones',type:'Acción'},
+  {id:'ced',label:'CEDEARs',type:'CEDEAR'},
+  {id:'etf',label:'ETF',type:'ETF'},
+  {id:'sob',label:'Bonos soberanos',type:'Bono soberano'},
+  {id:'let',label:'Letras',type:'Letra'},
+  {id:'on',label:'Obligaciones negociables',type:'ON'},
+  {id:'prov',label:'Bonos provinciales',type:'Bono provincial'}
+];
+async function getJSON(url){
+  const r=await fetch(url,{cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const t=await r.text();
+  if(t.trim()[0]!=='{') throw new Error('respuesta no JSON');
+  return JSON.parse(t);
+}
+async function getPayload(){
+  const r=await fetch(TABLERO+'/',{cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  const t=await r.text();
+  const m=t.match(/<script[^>]*id="payload"[^>]*>([\s\S]*?)<\/script>/);
+  if(!m) throw new Error('sin payload');
+  return JSON.parse(m[1]);
+}
+function normEquity(r,type,panel){
+  return {tk:r.tk,name:r.de,type,panel,sector:r.sec||'',isin:r.isin||'',ratio:r.ratio||null,
+    px:r.px,prev:r.pxp,open:r.ap,hi:r.mx,lo:r.mn,vol:r.vn,amt:r.ve,ops:r.op,beta:r.beta==null?null:r.beta,
+    h:Array.isArray(r.h)?r.h:[],unit:1,fixed:false};
+}
+function normBond(r,type){
+  const px=r.pxa;
+  const prev=(r.pxd!=null&&px)?px/(1+r.pxd/100):null;
+  return {tk:r.tk,name:(r.em?r.em+' · ':'')+(r.de||''),type,panel:type,sector:r.sec||'',isin:r.isin||'',
+    px,prev,unit:100,fixed:true,cur:r.me,h:[],amt:r.vol,vol:r.vn,
+    bond:{ytm:r.ytm,dm:r.dm,wal:r.wal,par:r.par,vt:r.vt,ai:r.ai,cup:r.cup,fv:r.fv,fe:r.fe,ley:r.ley,est:r.est,fc:r.fc,
+      em:r.em,mto:r.mto,usd:r.px,ren:Array.isArray(r.ren)?r.ren:[],amo:Array.isArray(r.amo)?r.amo:[],pam:r.pam}};
+}
+function buildMarket(acc,ced,pay){
+  const items=[];
+  (acc.rows||[]).forEach(r=>items.push(normEquity(r,'Acción',r.panl||'Acciones')));
+  (ced.rows||[]).forEach(r=>items.push(normEquity(r,r.tipo==='etf'?'ETF':'CEDEAR',r.tipol||'')));
+  if(pay){
+    ((pay.tp&&pay.tp.rows)||[]).forEach(r=>{
+      const t=r.ti==='LETRA'?'Letra':(r.sec==='Provinciales'?'Bono provincial':'Bono soberano');
+      items.push(normBond(r,t));
+    });
+    ((pay.on&&pay.on.rows)||[]).forEach(r=>items.push(normBond(r,'ON')));
+  }
+  const map={};
+  items.filter(i=>i.tk&&i.px>0).forEach(i=>{map[i.tk]=i});
+  return {date:acc.fecha||(pay&&pay.tp&&pay.tp.fecha)||null,prevDate:acc.fprev||null,
+    fx:pay&&pay.tp&&pay.tp.fx||null,items:Object.values(map),map,bondsOk:!!pay,savedAt:Date.now()};
+}
+async function loadMarketLive(){
+  const [acc,ced]=await Promise.all([getJSON(TABLERO+'/d/acc.json'),getJSON(TABLERO+'/d/ced.json')]);
+  let pay=null; try{pay=await getPayload()}catch(e){pay=null}
+  return buildMarket(acc.acc||acc,ced.ced||ced,pay);
+}
+
+/* ===== UTILIDADES ===== */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=(n,d=2)=>(n==null||isNaN(n))?'—':Number(n).toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=n=>(n==null||isNaN(n))?'—':(n<0?'−':'')+'$ '+fmt(Math.abs(n));
+const pct=n=>(n==null||isNaN(n))?'—':(n>0?'+':n<0?'−':'')+fmt(Math.abs(n))+'%';
+const cls=n=>n>0?'up':n<0?'down':'';
+const abbr=n=>n==null||isNaN(n)?'—':n>=1e9?'$ '+fmt(n/1e9,1)+' mil M':n>=1e6?'$ '+fmt(n/1e6,1)+' M':money(n);
+const fdate=d=>{if(!d)return '—';const p=String(d).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d};
+const fts=t=>{const d=new Date(t);const z=n=>String(n).padStart(2,'0');return z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear()+' '+z(d.getHours())+':'+z(d.getMinutes())};
+const LS={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},del(k){try{localStorage.removeItem(k)}catch(e){}}};
+function toast(m,ms=3200){const t=document.createElement('div');t.className='toast';t.textContent=m;$('#toastHost').appendChild(t);setTimeout(()=>t.remove(),ms)}
+
+/* ===== ESTADO / CUENTA ===== */
+const API='/api/cartera';
+const COM_DEFAULT=0.5, DERECHOS=0.08;
+let S=null, MKT=null, backend=false, syncState='', mktState='load';
+const newId=()=>Math.random().toString(36).slice(2,9);
+function genCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';const a=new Uint8Array(12);(window.crypto||{getRandomValues:x=>x.map(()=>Math.random()*256)}).getRandomValues(a);let s='';a.forEach((v,i)=>{s+=A[v%A.length];if(i%4===3&&i<11)s+='-'});return s}
+const okCode=c=>/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(c);
+const normCode=c=>String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(.{4})(.{4})/,'$1-$2-$3');
+function newState(name,cash){return {v:1,code:genCode(),name:name||'',created:Date.now(),updated:Date.now(),startCash:cash,cash,comPct:COM_DEFAULT,orders:[]}}
+function saveLocal(){if(S)LS.set('sim.state.'+S.code,JSON.stringify(S))}
+function setSync(s){syncState=s;const c=$('#chipSync');if(!c)return;
+  c.className='chip '+(s==='ok'?'ok':s==='err'?'bad':s==='pend'?'warn':'');
+  c.textContent=!backend?'Guardado en este navegador':s==='ok'?'Sincronizada':s==='err'?'Sin sincronizar':s==='pend'?'Guardando…':'Sincronizada'}
+let pushT=null;
+function persist(){S.updated=Date.now();saveLocal();if(!backend){setSync('');return}setSync('pend');clearTimeout(pushT);pushT=setTimeout(pushNow,500)}
+async function pushNow(){try{const r=await fetch(API+'?code='+encodeURIComponent(S.code),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(S)});if(!r.ok)throw 0;setSync('ok')}catch(e){setSync('err')}}
+async function detectBackend(){try{const r=await fetch(API+'?ping=1',{cache:'no-store'});const j=await r.json();backend=!!(j&&j.ok)}catch(e){backend=false}}
+async function pullRemote(code){const r=await fetch(API+'?code='+encodeURIComponent(code),{cache:'no-store'});if(r.status===404)return null;if(!r.ok)throw new Error('http');const j=await r.json();return j.state||null}
+
+/* ===== CÁLCULOS ===== */
+const feePct=()=>((S&&S.comPct!=null?S.comPct:COM_DEFAULT)+DERECHOS)/100;
+const gross=(it,qty,px)=>qty*px/it.unit;
+function positions(){
+  const P={};let realized=0;
+  S.orders.filter(o=>o.status==='Ejecutada').sort((a,b)=>a.execTs-b.execTs).forEach(o=>{
+    const p=P[o.tk]||(P[o.tk]={tk:o.tk,qty:0,cost:0,first:o.execTs,type:o.type});
+    if(o.side==='C'){p.qty+=o.qty;p.cost+=o.total}
+    else{const avg=p.qty?p.cost/p.qty:0;realized+=o.total-avg*o.qty;p.cost-=avg*o.qty;p.qty-=o.qty;if(p.qty<=0){delete P[o.tk]}}
+  });
+  const rows=Object.values(P).filter(p=>p.qty>0).map(p=>{
+    const it=MKT&&MKT.map[p.tk];const px=it?it.px:null;
+    const val=it?gross(it,p.qty,px):null;
+    const net=val==null?null:val*(1-feePct());
+    return {...p,it,px,avg:p.cost/p.qty,val,net,res:net==null?null:net-p.cost,resPct:net==null?null:(net/p.cost-1)*100};
+  });
+  return {rows,realized};
+}
+function reserved(){let c=0;S.orders.filter(o=>o.status==='Pendiente'&&o.side==='C').forEach(o=>{c+=o.qty*o.limit/o.unit*(1+feePct())});return c}
+function pendingSell(tk){return S.orders.filter(o=>o.status==='Pendiente'&&o.side==='V'&&o.tk===tk).reduce((a,o)=>a+o.qty,0)}
+const available=()=>S.cash-reserved();
+function execute(o,it){
+  const px=it.px,g=gross(it,o.qty,px),fee=g*feePct();
+  o.price=px;o.gross=g;o.fee=fee;o.total=o.side==='C'?g+fee:g-fee;o.status='Ejecutada';o.execTs=Date.now();o.execDate=MKT.date;
+  S.cash+=o.side==='C'?-o.total:o.total;
+}
+function placeOrder(it,side,type,qty,limit,plazo){
+  qty=Math.floor(qty);
+  if(!(qty>=1))return {err:'La cantidad debe ser al menos 1.'};
+  const o={id:newId(),ts:Date.now(),tk:it.tk,name:it.name,type:it.type,unit:it.unit,side:side==='buy'?'C':'V',otype:type,qty,limit:type==='limitada'?limit:null,plazo,status:'Pendiente',dataDate:MKT.date};
+  if(type==='limitada'&&!(limit>0))return {err:'Ingresá un precio límite válido.'};
+  const px=it.px,g=gross(it,qty,px),fee=g*feePct();
+  if(o.side==='C'){
+    const need=type==='limitada'?qty*limit/it.unit*(1+feePct()):g+fee;
+    if(need>available()+0.005)return {err:'No tenés efectivo suficiente. Disponible: '+money(available())+'.'};
+  }else{
+    const pos=positions().rows.find(r=>r.tk===it.tk);
+    const free=(pos?pos.qty:0)-pendingSell(it.tk);
+    if(qty>free)return {err:'No tenés tantas unidades para vender. Disponibles: '+fmt(Math.max(free,0),0)+'.'};
+  }
+  const fills=type==='mercado'||(o.side==='C'?px<=limit:px>=limit);
+  if(fills)execute(o,it);
+  S.orders.unshift(o);persist();
+  return {ok:true,order:o};
+}
+function evalPending(){
+  if(!MKT)return 0;let n=0;
+  S.orders.filter(o=>o.status==='Pendiente').slice().reverse().forEach(o=>{
+    const it=MKT.map[o.tk];if(!it||!(MKT.date>o.dataDate))return;
+    const fills=o.side==='C'?it.px<=o.limit:it.px>=o.limit;
+    if(!fills)return;
+    if(o.side==='C'&&o.qty*it.px/o.unit*(1+feePct())>S.cash+0.005){o.status='Rechazada';return}
+    execute(o,it);n++;
+  });
+  if(n)persist();return n;
+}
+function cancelOrder(id){const o=S.orders.find(x=>x.id===id);if(o&&o.status==='Pendiente'){o.status='Cancelada';persist();render()}}
+
+/* ===== MERCADO (carga, caché) ===== */
+async function loadMarket(force){
+  mktState='load';chipMkt();
+  try{
+    MKT=await loadMarketLive();
+    mktState='ok';
+    LS.set('sim.mkt',JSON.stringify(MKT));
+  }catch(e){
+    let c=null;try{c=JSON.parse(LS.get('sim.mkt')||'null')}catch(x){}
+    if(!c){try{const r=await fetch('data/snapshot.json');const j=await r.json();if(j&&j.items)c=j}catch(x){}}
+    if(c&&c.items){c.map={};c.items.forEach(i=>c.map[i.tk]=i);MKT=c;mktState='cache'}
+    else{MKT=null;mktState='fail'}
+  }
+  chipMkt();
+  if(S){const n=evalPending();if(n)toast(n+(n>1?' órdenes pendientes se ejecutaron':' orden pendiente se ejecutó')+' con el último cierre.');render()}
+}
+function chipMkt(){const c=$('#chipMkt');if(!c)return;
+  if(mktState==='load'){c.className='chip warn';c.textContent='Cargando mercado…'}
+  else if(mktState==='ok'){c.className='chip ok';c.textContent='Cierre del '+fdate(MKT.date)}
+  else if(mktState==='cache'){c.className='chip warn';c.textContent='Sin conexión · datos guardados del '+fdate(MKT.date)}
+  else{c.className='chip bad';c.textContent='Mercado no disponible'}
+}
+
+/* ===== VISTAS ===== */
+let view='cuenta',panel='acc',search='',sortK='tk',sortD=1,limitRows=120;
+function render(){
+  if(!S)return;
+  $('#btnWho').textContent=(S.name?S.name+' · ':'')+S.code;
+  ['cuenta','cot','ord','glo'].forEach(v=>$('#v-'+v).classList.toggle('hide',v!==view));
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+  if(view==='cuenta')rCuenta();else if(view==='cot')rCot();else if(view==='ord')rOrd();else rGlo();
+}
+function noMkt(){return mktState==='fail'?'<div class="msg e">No pudimos leer el Tablero de BYMA y no hay datos guardados. <button class="btn sm" onclick="loadMarket()">Reintentar</button></div>':''}
+const TYPE_COL={'Acción':'#153244','CEDEAR':'#2f7fa5','ETF':'#8DE2D6','Bono soberano':'#FFCC00','Letra':'#e8a317','ON':'#7a5af8','Bono provincial':'#c46a3a'};
+function rCuenta(){
+  const el=$('#v-cuenta');const {rows,realized}=positions();
+  const inv=rows.reduce((a,r)=>a+(r.val||0),0), invNet=rows.reduce((a,r)=>a+(r.net||0),0), cost=rows.reduce((a,r)=>a+r.cost,0);
+  const total=S.cash+invNet, res=total-S.startCash, resP=res/S.startCash*100;
+  const resPos=invNet-cost;
+  const alloc=Object.keys(TYPE_COL).map(t=>({t,v:rows.filter(r=>r.type===t).reduce((a,r)=>a+(r.val||0),0)})).filter(x=>x.v>0);
+  const tv=inv+S.cash;
+  el.innerHTML=`<h2>Mi cuenta</h2><div class="crumb">Resumen y detalle de cuenta${MKT?' · valuada al cierre del '+fdate(MKT.date):''}</div>${noMkt()}
+  <div class="grid4">
+   <div class="card kpi"><div class="l">Total valorizado</div><div class="v num">${money(total)}</div><div class="s ${cls(res)}">${pct(resP)} vs. capital inicial (${money(S.startCash)})</div></div>
+   <div class="card kpi"><div class="l">Efectivo disponible</div><div class="v num">${money(available())}</div><div class="s note">${reserved()>0?'Reservado en órdenes: '+money(reserved()):'Sin reservas'}</div></div>
+   <div class="card kpi"><div class="l">Invertido (valuación)</div><div class="v num">${money(inv)}</div><div class="s ${cls(resPos)}">Resultado no realizado: ${money(resPos)}</div></div>
+   <div class="card kpi"><div class="l">Resultado realizado</div><div class="v num ${cls(realized)}">${money(realized)}</div><div class="s note">Por ventas ya hechas</div></div>
+  </div>
+  ${alloc.length?`<div class="card" style="margin-bottom:18px"><h3>Composición de la cartera</h3><div class="bar">${alloc.concat([{t:'Efectivo',v:S.cash}]).map(x=>`<i style="width:${x.v/tv*100}%;background:${TYPE_COL[x.t]||'#c9d3da'}" title="${esc(x.t)}"></i>`).join('')}</div><div class="legend">${alloc.concat([{t:'Efectivo',v:S.cash}]).map(x=>`<span style="--c:${TYPE_COL[x.t]||'#c9d3da'}">${esc(x.t)} ${fmt(x.v/tv*100,1)}%</span>`).join('')}</div></div>`:''}
+  <h3 style="color:var(--navy);margin:6px 0 10px">Tenencia</h3>
+  ${rows.length?`<div class="tw"><table><thead><tr><th>Especie</th><th class="desc">Tipo</th><th>Cantidad</th><th>Precio prom. compra</th><th>Precio actual</th><th>Costo</th><th>Valuación</th><th>Resultado $</th><th>Resultado %</th><th>Desde</th><th></th></tr></thead><tbody>
+  ${rows.map(r=>`<tr class="row" data-tk="${esc(r.tk)}"><td class="tk">${esc(r.tk)}</td><td class="desc">${esc(r.type)}</td><td class="num">${fmt(r.qty,0)}</td><td class="num">${money(r.avg*(r.it?r.it.unit:1))}</td><td class="num">${r.it?money(r.px):'—'}</td><td class="num">${money(r.cost)}</td><td class="num">${money(r.val)}</td><td class="num ${cls(r.res)}">${money(r.res)}</td><td class="num ${cls(r.res)}">${pct(r.resPct)}</td><td class="num">${fdate(new Date(r.first).toISOString())}</td><td><button class="btn sm g" data-op="${esc(r.tk)}">Operar</button></td></tr>`).join('')}
+  </tbody></table></div><p class="note">Resultado = valuación al último cierre (descontando comisión y derechos de venta) menos el costo de compra (con comisión y derechos). Para bonos, cantidad y precios se expresan por valor nominal (precio cada 100 VN).</p>`
+  :`<div class="card empty">Todavía no tenés posiciones. Entrá a <b>Cotizaciones</b>, elegí un instrumento y hacé tu primera compra.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
+  el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=e=>{if(e.target.closest('button'))return;openInst(tr.dataset.tk)});
+  el.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>openInst(b.dataset.op,'sell'));
+}
+function go(v){view=v;render();window.scrollTo(0,0)}
+function panelItems(id){
+  if(!MKT)return [];const t=TIPOS.find(x=>x.id===id).type;
+  return MKT.items.filter(i=>i.type===t);
+}
+function rCot(){
+  const el=$('#v-cot');
+  const eq=['acc','ced','etf'].includes(panel);
+  const cols=eq?[['tk','Especie'],['name','Descripción'],['open','Apertura'],['lo','Mínimo'],['hi','Máximo'],['px','Cierre'],['prev','Cierre ant.'],['var','Var. %'],['vol','Volumen'],['amt','Monto $'],['ops','Ops.']]
+    :[['tk','Especie'],['name','Descripción'],['fv','Vto.'],['cur','Mon.'],['px','Precio c/100 VN'],['var','Var. %'],['ytm','TIR %'],['dm','Duration'],['par','Paridad'],['amt','Monto']];
+  let it=panelItems(panel).map(i=>({...i,var:i.prev?(i.px/i.prev-1)*100:null,fv:i.bond&&i.bond.fv,ytm:i.bond&&i.bond.ytm,dm:i.bond&&i.bond.dm,par:i.bond&&i.bond.par}));
+  if(search){const q=search.toLowerCase();it=it.filter(i=>(i.tk+' '+i.name).toLowerCase().includes(q))}
+  it.sort((a,b)=>{const x=a[sortK],y=b[sortK];if(x==null&&y==null)return 0;if(x==null)return 1;if(y==null)return -1;return (typeof x==='string'?x.localeCompare(y):x-y)*sortD});
+  const total=it.length;it=it.slice(0,limitRows);
+  const cell=(i,k)=>{
+    switch(k){case 'tk':return `<td class="tk">${esc(i.tk)}</td>`;case 'name':return `<td class="desc" title="${esc(i.name)}">${esc(i.name)}</td>`;
+      case 'var':return `<td class="num ${cls(i.var)}">${pct(i.var)}</td>`;
+      case 'vol':case 'ops':return `<td class="num">${fmt(i[k],0)}</td>`;case 'amt':return `<td class="num">${fmt(i.amt,0)}</td>`;
+      case 'fv':return `<td class="num">${fdate(i.fv)}</td>`;case 'cur':return `<td>${esc(i.cur||'')}</td>`;
+      case 'ytm':case 'dm':case 'par':return `<td class="num">${fmt(i[k],2)}</td>`;
+      default:return `<td class="num">${fmt(i[k],2)}</td>`}
+  };
+  el.innerHTML=`<h2>Cotizaciones</h2><div class="crumb">Precios de cierre del Tablero de BYMA${MKT?' · '+fdate(MKT.date):''}. Tocá una especie para ver su panel y operar.</div>${noMkt()}
+  <div class="pills">${TIPOS.map(t=>`<button class="pill ${t.id===panel?'on':''}" data-p="${t.id}">${t.label}</button>`).join('')}</div>
+  <div class="tools"><input id="q" placeholder="Buscar especie o nombre…" value="${esc(search)}"><span class="note">${total} instrumentos</span></div>
+  <div class="tw" style="max-height:68vh"><table><thead><tr>${cols.map(([k,l])=>`<th class="sortable ${k==='name'?'desc':''}" data-k="${k}">${l}${sortK===k?(sortD>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>
+   ${it.map(i=>`<tr class="row" data-tk="${esc(i.tk)}">${cols.map(([k])=>cell(i,k)).join('')}</tr>`).join('')||`<tr><td colspan="${cols.length}" class="empty">Sin resultados</td></tr>`}</tbody></table></div>
+  ${total>limitRows?`<p style="text-align:center"><button class="btn g" id="more">Ver más (${total-limitRows} restantes)</button></p>`:''}`;
+  el.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>{panel=b.dataset.p;sortK='tk';sortD=1;limitRows=120;rCot()});
+  el.querySelectorAll('th.sortable').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(sortK===k)sortD=-sortD;else{sortK=k;sortD=1}rCot()});
+  el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>openInst(tr.dataset.tk));
+  const q=$('#q');q.oninput=()=>{search=q.value;limitRows=120;const pos=q.selectionStart;rCot();const q2=$('#q');q2.focus();q2.setSelectionRange(pos,pos)};
+  const m=$('#more');if(m)m.onclick=()=>{limitRows+=200;rCot()};
+}
+function rOrd(){
+  const el=$('#v-ord');const O=S.orders;
+  const st={Ejecutada:'',Pendiente:'pend',Cancelada:'cx',Rechazada:'cx'};
+  el.innerHTML=`<h2>Órdenes</h2><div class="crumb">Historial de operaciones de tu cuenta</div>
+  <div class="msg i"><b>¿Cómo funciona una orden?</b> Una orden es la instrucción que enviás al mercado para comprar o vender. La <b>orden a mercado</b> se ejecuta de inmediato al último precio de cierre; la <b>limitada</b> solo se ejecuta si el cierre alcanza tu precio (compra: igual o menor; venta: igual o mayor) y, si no, queda <b>pendiente</b> hasta el próximo cierre.</div>
+  ${O.length?`<div class="tw"><table><thead><tr><th>Fecha/Hora</th><th>Especie</th><th>Operación</th><th>Tipo</th><th>Cantidad</th><th>Precio</th><th>Monto</th><th>Comisión</th><th>Total</th><th>Plazo</th><th>Estado</th><th></th></tr></thead><tbody>
+  ${O.map(o=>`<tr><td class="num">${fts(o.ts)}</td><td class="tk">${esc(o.tk)}</td><td><span class="badge ${o.side==='C'?'buy':'sell'}">${o.side==='C'?'COMPRA':'VENTA'}</span></td><td>${o.otype==='limitada'?'Limitada':'Mercado'}</td><td class="num">${fmt(o.qty,0)}</td><td class="num">${o.price!=null?money(o.price):(o.limit?'lím. '+money(o.limit):'—')}</td><td class="num">${o.gross!=null?money(o.gross):'—'}</td><td class="num">${o.fee!=null?money(o.fee):'—'}</td><td class="num">${o.total!=null?money(o.total):'—'}</td><td>${esc(o.plazo)}</td><td><span class="badge ${st[o.status]||''}">${o.status}</span>${o.execDate?`<div class="note">cierre ${fdate(o.execDate)}</div>`:''}</td><td>${o.status==='Pendiente'?`<button class="btn sm g" data-cx="${o.id}">Cancelar</button>`:''}</td></tr>`).join('')}
+  </tbody></table></div>`:`<div class="card empty">Todavía no hiciste ninguna operación.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
+  el.querySelectorAll('[data-cx]').forEach(b=>b.onclick=()=>cancelOrder(b.dataset.cx));
+}
+function rGlo(){
+  $('#v-glo').innerHTML=`<h2>Glosario</h2><div class="crumb">Términos que vas a ver en el simulador</div><div class="card"><dl class="gl">
+  <dt>Especie / Ticker</dt><dd>Código que identifica cada instrumento. Ej.: YPFD = acciones de YPF.</dd>
+  <dt>Cierre y Cierre anterior</dt><dd>Último precio de la rueda y el de la rueda previa. La variación % compara ambos.</dd>
+  <dt>Apertura, Mínimo y Máximo</dt><dd>Primer precio del día y los extremos que alcanzó durante la rueda.</dd>
+  <dt>Volumen y Monto</dt><dd>Cantidad de nominales operados y su valor total en pesos.</dd>
+  <dt>CEDEAR</dt><dd>Certificado que representa acciones de empresas del exterior y cotiza en pesos en Argentina.</dd>
+  <dt>ETF</dt><dd>Fondo cotizado que replica un índice o canasta de activos.</dd>
+  <dt>Obligación negociable (ON)</dt><dd>Bono emitido por una empresa para financiarse.</dd>
+  <dt>Valor nominal (VN) y precio cada 100 VN</dt><dd>Los bonos y letras cotizan cada 100 de valor nominal. Si comprás 1.000 VN a un precio de 102.700 cada 100 VN, pagás $ 1.027.000.</dd>
+  <dt>TIR</dt><dd>Tasa interna de retorno: rendimiento anual estimado si mantenés el bono hasta el vencimiento y cobrás todos los flujos.</dd>
+  <dt>Duration</dt><dd>Plazo promedio de cobro de los flujos; mide cuánto cambia el precio ante cambios de tasa.</dd>
+  <dt>Paridad</dt><dd>Precio del bono respecto de su valor técnico (capital más intereses corridos).</dd>
+  <dt>Orden a mercado / limitada</dt><dd>A mercado se ejecuta al precio disponible; limitada solo si se alcanza el precio que elegiste.</dd>
+  <dt>PPC</dt><dd>Precio promedio de compra de tu tenencia, incluyendo comisiones.</dd>
+  <dt>Comisión y derechos</dt><dd>Costos de operar: comisión del broker (${fmt(S.comPct,2)}%) y derechos de mercado (${fmt(DERECHOS,2)}%), en cada compra y venta.</dd>
+  </dl></div>`;
+}
+
+/* ===== PANEL DE INSTRUMENTO + ORDEN ===== */
+let cur=null,side='buy',otype='mercado',rangeN=126;
+function chartSVG(it,avg){
+  const h=it.h.slice(-rangeN);if(h.length<2)return '<div class="msg i">Este instrumento no tiene serie histórica en el tablero.</div>';
+  const W=640,H=210,pl=8,pr=60,pt=10,pb=18;
+  let mn=Math.min(...h),mx=Math.max(...h);if(avg!=null){mn=Math.min(mn,avg);mx=Math.max(mx,avg)}
+  const sp=(mx-mn)||1;const x=i=>pl+i*(W-pl-pr)/(h.length-1),y=v=>pt+(H-pt-pb)*(1-(v-mn)/sp);
+  const up=h[h.length-1]>=h[0];const col=up?'#0f9d58':'#d93025';
+  const pts=h.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+  const lbl=(v,yy)=>`<text x="${W-pr+6}" y="${yy+4}" font-size="11" fill="#6b7c89" font-family="monospace">${fmt(v,v>=1000?0:2)}</text>`;
+  return `<svg class="ch" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline fill="none" stroke="${col}" stroke-width="2" points="${pts}"/>
+   <line x1="${pl}" x2="${W-pr}" y1="${y(mn)}" y2="${y(mn)}" stroke="#dfe5ea"/><line x1="${pl}" x2="${W-pr}" y1="${y(mx)}" y2="${y(mx)}" stroke="#dfe5ea"/>
+   ${lbl(mx,y(mx))}${lbl(mn,y(mn))}
+   ${avg!=null?`<line x1="${pl}" x2="${W-pr}" y1="${y(avg)}" y2="${y(avg)}" stroke="#153244" stroke-dasharray="5 4"/><text x="${W-pr+6}" y="${y(avg)+4}" font-size="11" fill="#153244" font-family="monospace">PPC</text>`:''}
+   <text x="${pl}" y="${H-3}" font-size="11" fill="#6b7c89">hace ${h.length} ruedas</text><text x="${W-pr}" y="${H-3}" font-size="11" fill="#6b7c89" text-anchor="end">último cierre</text></svg>`;
+}
+function bondInfo(it){
+  const b=it.bond;if(!b)return '';
+  const row=(l,v)=>`<div class="stat"><div class="l">${l}</div><div class="v num">${v}</div></div>`;
+  const ren=b.ren.filter(r=>r[0]>=(MKT.date||'')).slice(0,8), amo=b.amo.filter(r=>r[0]>=(MKT.date||'')).slice(0,8);
+  return `<div class="stats">${row('TIR',b.ytm!=null?fmt(b.ytm)+'%':'—')}${row('Duration mod.',fmt(b.dm))}${row('WAL (años)',fmt(b.wal))}${row('Paridad',b.par!=null?fmt(b.par)+'%':'—')}${row('Valor técnico',b.vt!=null?fmt(b.vt):'—')}${row('Int. corridos',b.ai!=null?fmt(b.ai):'—')}${row('Cupón vigente',b.cup!=null?fmt(b.cup*100)+'%':'—')}${row('Vencimiento',fdate(b.fv))}${row('Emisión',fdate(b.fe))}${row('Moneda',esc(it.cur||'—'))}${row('Ley',esc(b.ley||'—'))}${row('Estructura',esc(b.est||'—'))}</div>
+  <div class="note">Emisor: ${esc(b.em||'—')} · Precio en USD: ${b.usd!=null?fmt(b.usd,3):'—'}</div>
+  ${(ren.length||amo.length)?`<h3 style="margin:14px 0 6px;color:var(--navy);font-size:14px">Próximos flujos</h3><div class="flows tw"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cada 100 VN</th></tr></thead><tbody>${ren.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Renta</td><td class="num">${fmt(r[1],3)}</td></tr>`).join('')}${amo.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Amortización</td><td class="num">${fmt(r[1],2)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+}
+function openInst(tk,sd){
+  if(!MKT||!MKT.map[tk]){toast('Ese instrumento no está en el último cierre.');return}
+  cur=tk;side=sd||'buy';otype='mercado';rangeN=126;drawModal();
+}
+function closeModal(){$('#modalHost').innerHTML='';cur=null}
+function drawModal(){
+  const it=MKT.map[cur];const pos=positions().rows.find(r=>r.tk===cur);
+  const v=it.prev?(it.px/it.prev-1)*100:null;
+  const st=(l,x)=>`<div class="stat"><div class="l">${l}</div><div class="v num">${x}</div></div>`;
+  const eq=!it.fixed;
+  $('#modalHost').innerHTML=`<div class="ov" id="ov"><div class="modal">
+   <div class="mh"><div><div class="t">${esc(it.tk)} <span class="badge">${esc(it.type)}</span></div><div class="d">${esc(it.name)}${it.sector?' · '+esc(it.sector):''}</div></div>
+    <div style="margin-left:auto;text-align:right"><div class="num" style="font-size:24px;font-weight:800;color:var(--navy)">${money(it.px)}</div><div class="num ${cls(v)}">${pct(v)} <span class="note">${it.fixed?'cada 100 VN':''}</span></div></div>
+    <button class="x" id="mx">×</button></div>
+   <div class="mbody"><div class="mleft">
+    ${eq?`<div class="stats">${st('Apertura',money(it.open))}${st('Mínimo',money(it.lo))}${st('Máximo',money(it.hi))}${st('Cierre ant.',money(it.prev))}${st('Volumen',fmt(it.vol,0))}${st('Monto',abbr(it.amt))}${st('Operaciones',fmt(it.ops,0))}${it.beta!=null?st('Beta',fmt(it.beta)):''}${it.ratio?st('Ratio',esc(it.ratio)):''}</div>
+    <div class="rng">${[[21,'1 mes'],[63,'3 meses'],[126,'6 meses']].map(([n,l])=>`<button class="pill ${rangeN===n?'on':''}" data-r="${n}">${l}</button>`).join('')}</div>${chartSVG(it,pos?pos.avg:null)}
+    <p class="note">Serie de cierres diarios del Tablero de BYMA${pos?'. La línea punteada es tu precio promedio de compra (PPC).':'.'}</p>`:bondInfo(it)}
+   </div><div class="mright" id="tkt"></div></div></div></div>`;
+  $('#mx').onclick=closeModal;$('#ov').onclick=e=>{if(e.target.id==='ov')closeModal()};
+  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{rangeN=+b.dataset.r;drawModal()});
+  drawTicket();
+}
+function drawTicket(){
+  const it=MKT.map[cur];const pos=positions().rows.find(r=>r.tk===cur);
+  const holding=pos?pos.qty-pendingSell(cur):0;
+  const t=$('#tkt');
+  t.innerHTML=`<h3 style="margin:0 0 10px;color:var(--navy)">Nueva orden</h3>
+  <div class="seg"><button class="b ${side==='buy'?'on':''}" data-s="buy">COMPRA</button><button class="s ${side==='sell'?'on':''}" data-s="sell">VENTA</button></div>
+  <label class="field"><span>Tipo de orden</span><select id="tOt"><option value="mercado" ${otype==='mercado'?'selected':''}>Mercado</option><option value="limitada" ${otype==='limitada'?'selected':''}>Limitada</option></select></label>
+  <label class="field"><span>${it.fixed?'Cantidad (valor nominal)':'Cantidad'}</span><div class="qty"><button id="qm">−</button><input id="tQ" type="number" min="1" step="1" value="${window._q||''}" placeholder="0"><button id="qp">+</button></div></label>
+  <div class="note" style="margin:-6px 0 10px">${side==='buy'?'Máx. comprable: <a href="#" id="tMax">'+fmt(maxBuy(it),0)+'</a>':'Tenencia disponible: <a href="#" id="tMax">'+fmt(holding,0)+'</a>'}</div>
+  ${otype==='limitada'?`<label class="field"><span>Precio límite${it.fixed?' (cada 100 VN)':''}</span><input id="tL" type="number" step="0.01" value="${window._l||it.px}"></label>`:''}
+  <label class="field"><span>Plazo</span><select id="tP"><option>CI</option><option selected>24hs</option></select></label>
+  <div class="sum" id="tSum"></div><div id="tMsg"></div>
+  <button class="btn ${side==='buy'?'grn':'red'}" id="tGo" style="width:100%">${side==='buy'?'COMPRAR':'VENDER'}</button>
+  <p class="note" style="margin-top:10px">Efectivo disponible: <b>${money(available())}</b>${pos?' · Tenés '+fmt(pos.qty,0)+' (PPC '+money(pos.avg*it.unit)+(it.fixed?' c/100 VN':'')+')':''}</p>`;
+  t.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{side=b.dataset.s;drawTicket()});
+  $('#tOt').onchange=e=>{otype=e.target.value;window._q=$('#tQ').value;drawTicket()};
+  const q=$('#tQ');q.oninput=sum;$('#qm').onclick=()=>{q.value=Math.max(0,(+q.value||0)-(it.fixed?100:1));sum()};$('#qp').onclick=()=>{q.value=(+q.value||0)+(it.fixed?100:1);sum()};
+  const L=$('#tL');if(L)L.oninput=()=>{window._l=L.value;sum()};
+  $('#tMax').onclick=e=>{e.preventDefault();q.value=side==='buy'?maxBuy(it):holding;sum()};
+  $('#tGo').onclick=submit;sum();
+}
+function maxBuy(it){const px=otype==='limitada'&&window._l>0?+window._l:it.px;return Math.max(0,Math.floor(available()/(px/it.unit*(1+feePct()))))}
+function sum(){
+  const it=MKT.map[cur];const q=Math.floor(+$('#tQ').value||0);window._q=$('#tQ').value;
+  const L=$('#tL');const lim=L?+L.value:null;
+  const px=otype==='limitada'&&lim>0?lim:it.px;const g=q*px/it.unit,fee=g*feePct(),tot=side==='buy'?g+fee:g-fee;
+  const fillsNow=otype==='mercado'||(side==='buy'?it.px<=lim:it.px>=lim);
+  $('#tSum').innerHTML=`<div><span>Precio ${otype==='mercado'?'(cierre '+fdate(MKT.date)+')':'límite'}</span><span class="num">${money(px)}</span></div><div><span>Monto</span><span class="num">${money(g)}</span></div><div><span>Comisión + derechos (${fmt(feePct()*100,2)}%)</span><span class="num">${money(fee)}</span></div><div class="tot"><span>${side==='buy'?'Total a pagar':'Total a recibir'}</span><span class="num">${money(tot)}</span></div>`;
+  $('#tMsg').innerHTML=otype==='limitada'?`<div class="msg ${fillsNow?'o':'w'}">${fillsNow?'Con el último cierre esta orden se ejecutaría ahora.':'El último cierre ('+money(it.px)+') no alcanza tu precio: la orden quedará pendiente hasta un próximo cierre que lo cumpla.'}</div>`:'';
+}
+function submit(){
+  const it=MKT.map[cur];const q=+$('#tQ').value;const L=$('#tL');
+  const r=placeOrder(it,side,otype,q,L?+L.value:null,$('#tP').value);
+  if(r.err){$('#tMsg').innerHTML='<div class="msg e">'+esc(r.err)+'</div>';return}
+  const o=r.order;window._q='';window._l='';
+  toast(o.status==='Ejecutada'?(o.side==='C'?'Compra ejecutada: ':'Venta ejecutada: ')+fmt(o.qty,0)+' '+o.tk+' a '+money(o.price):'Orden limitada registrada como pendiente.');
+  closeModal();render();
+}
+
+/* ===== SESIÓN ===== */
+function showApp(){$('#login').classList.add('hide');$('#app').classList.remove('hide');setSync(syncState);chipMkt();render()}
+function exportFile(){
+  const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download='mi-cartera-'+S.code+'.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+}
+async function startSession(st){
+  S=st;LS.set('sim.last',S.code);saveLocal();
+  if(backend){setSync('pend');pushNow()}else setSync('');
+  showApp();
+  if(MKT){if(evalPending())render()}else if(mktState!=='load')loadMarket();
+}
+async function doEnter(){
+  const code=normCode($('#inCode').value);const er=$('#lgErr');er.textContent='';
+  if(!okCode(code)){er.textContent='El código tiene el formato XXXX-XXXX-XXXX.';return}
+  $('#btnEnter').disabled=true;
+  try{
+    let local=null;try{local=JSON.parse(LS.get('sim.state.'+code)||'null')}catch(e){}
+    let remote=null,failed=false;
+    if(backend){try{remote=await pullRemote(code)}catch(e){failed=true}}
+    let st=local;if(remote&&(!local||remote.updated>=local.updated))st=remote;
+    if(!st){er.textContent=backend&&!failed?'No encontramos ese código. Revisalo e intentá de nuevo.':failed?'No pudimos conectar con el servidor. Probá de nuevo en un momento.':'Este navegador no tiene guardada esa cuenta. Si tenés un archivo de respaldo, importalo abajo.';return}
+    await startSession(st);
+  }finally{$('#btnEnter').disabled=false}
+}
+function initLogin(){
+  $('#btnCreate').onclick=async()=>{
+    const st=newState($('#inName').value.trim(),+$('#inCash').value);
+    S=st;LS.set('sim.last',st.code);saveLocal();
+    if(backend){try{await pushNow()}catch(e){}}
+    $('#lgMain').classList.add('hide');$('#lgCode').classList.remove('hide');$('#codeShow').textContent=st.code;
+  };
+  $('#btnGo').onclick=()=>startSession(S);
+  $('#btnCopy').onclick=()=>{try{navigator.clipboard.writeText(S.code);toast('Código copiado')}catch(e){toast('Copialo a mano: '+S.code)}};
+  $('#btnExp0').onclick=exportFile;
+  $('#btnEnter').onclick=doEnter;$('#inCode').onkeydown=e=>{if(e.key==='Enter')doEnter()};
+  $('#lnkImport').onclick=e=>{e.preventDefault();$('#fileImport').click()};
+  $('#fileImport').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const st=JSON.parse(r.result);if(!st||!okCode(st.code)||!Array.isArray(st.orders))throw 0;startSession(st)}catch(x){$('#lgErr').textContent='El archivo no es un respaldo válido.'}};r.readAsText(f)};
+  $('#lgNote').textContent=backend?'Tu cartera se guarda en la nube con tu código.':'Modo local: tu cartera se guarda en este navegador (usá "Descargar respaldo" para llevarla a otro equipo).';
+  const last=LS.get('sim.last');if(last)$('#inCode').value=last;
+}
+function menu(){
+  const h=$('#modalHost');
+  h.innerHTML=`<div class="ov" id="ov"><div class="modal" style="max-width:460px"><div class="mh"><div><div class="t" style="font-size:20px">Mi sesión</div></div><button class="x" id="mx">×</button></div><div style="padding:18px 22px">
+  <p class="note" style="margin-top:0">Tu código personal</p><div class="codebox" style="font-size:20px;margin:4px 0 14px">${esc(S.code)}</div>
+  <label class="field"><span>Comisión del broker (%)</span><input id="mCom" type="number" step="0.05" min="0" max="5" value="${S.comPct}"></label>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn g" id="mExp">Descargar respaldo</button><button class="btn g" id="mRef">Actualizar precios</button></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn g" id="mOut">Cerrar sesión</button><button class="btn red" id="mReset">Reiniciar cuenta</button></div>
+  </div></div></div>`;
+  $('#mx').onclick=()=>{h.innerHTML=''};$('#ov').onclick=e=>{if(e.target.id==='ov')h.innerHTML=''};
+  $('#mCom').onchange=e=>{const v=Math.max(0,Math.min(5,+e.target.value||0));S.comPct=v;persist();render();toast('Comisión actualizada')};
+  $('#mExp').onclick=exportFile;$('#mRef').onclick=()=>{h.innerHTML='';loadMarket()};
+  $('#mOut').onclick=()=>{h.innerHTML='';S=null;$('#app').classList.add('hide');$('#login').classList.remove('hide');$('#lgMain').classList.remove('hide');$('#lgCode').classList.add('hide');$('#inCode').value=LS.get('sim.last')||''};
+  $('#mReset').onclick=()=>{if(!confirm('Se borran todas tus operaciones y volvés al capital inicial. ¿Seguro?'))return;S.orders=[];S.cash=S.startCash;persist();h.innerHTML='';render();toast('Cuenta reiniciada')};
+}
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>go(b.dataset.v));
+$('#btnWho').onclick=menu;
+(async function init(){
+  await detectBackend();initLogin();
+  loadMarket();
+})();
+
+</script>
+</body></html>
