@@ -284,13 +284,13 @@ function pendingSell(tk){return S.orders.filter(o=>o.status==='Pendiente'&&o.sid
 const available=()=>S.cash-reserved();
 function execute(o,it){
   const px=it.px,g=gross(it,o.qty,px),fee=g*feePct();
-  o.price=px;o.gross=g;o.fee=fee;o.total=o.side==='C'?g+fee:g-fee;o.status='Ejecutada';o.execTs=Date.now();o.execDate=MKT.date;
+  o.price=px;o.gross=g;o.fee=fee;o.total=o.side==='C'?g+fee:g-fee;o.status='Ejecutada';o.execTs=Date.now();o.execDate=MKT.date;o.execNote=MKT.live?'precio del día '+MKT.live.hora:'cierre '+fdate(MKT.date);
   S.cash+=o.side==='C'?-o.total:o.total;
 }
 function placeOrder(it,side,type,qty,limit,plazo){
   qty=Math.floor(qty);
   if(!(qty>=1))return {err:'La cantidad debe ser al menos 1.'};
-  const o={id:newId(),ts:Date.now(),tk:it.tk,name:it.name,type:it.type,unit:it.unit,side:side==='buy'?'C':'V',otype:type,qty,limit:type==='limitada'?limit:null,plazo,status:'Pendiente',dataDate:MKT.date};
+  const o={id:newId(),ts:Date.now(),tk:it.tk,name:it.name,type:it.type,unit:it.unit,side:side==='buy'?'C':'V',otype:type,qty,limit:type==='limitada'?limit:null,plazo,status:'Pendiente',dataDate:MKT.stamp||MKT.date};
   if(type==='limitada'&&!(limit>0))return {err:'Ingresá un precio límite válido.'};
   const px=it.px,g=gross(it,qty,px),fee=g*feePct();
   if(o.side==='C'){
@@ -309,7 +309,7 @@ function placeOrder(it,side,type,qty,limit,plazo){
 function evalPending(){
   if(!MKT)return 0;let n=0;
   S.orders.filter(o=>o.status==='Pendiente').slice().reverse().forEach(o=>{
-    const it=MKT.map[o.tk];if(!it||!(MKT.date>o.dataDate))return;
+    const it=MKT.map[o.tk];if(!it||!((MKT.stamp||MKT.date)>o.dataDate))return;
     const fills=o.side==='C'?it.px<=o.limit:it.px>=o.limit;
     if(!fills)return;
     if(o.side==='C'&&o.qty*it.px/o.unit*(1+feePct())>S.cash+0.005){o.status='Rechazada';return}
@@ -319,6 +319,40 @@ function evalPending(){
 }
 function cancelOrder(id){const o=S.orders.find(x=>x.id===id);if(o&&o.status==='Pendiente'){o.status='Cancelada';persist();render()}}
 
+/* ===== PRECIO DEL DÍA (Rava, vía /api/rava) ===== */
+async function applyRava(m){
+  if(!backend||!m)return false;
+  try{
+    const ac=new AbortController();const to=setTimeout(()=>ac.abort(),9000);
+    const r=await fetch('/api/rava',{signal:ac.signal,cache:'no-store'});clearTimeout(to);
+    if(!r.ok)throw 0;const j=await r.json();if(!j||!j.items)throw 0;
+    let n=0,stamp='';
+    m.items.forEach(it=>{
+      const q=j.items[it.tk];if(!q||!(q.u>0))return;if(m.date&&q.f<m.date)return;
+      if(!it.base)it.base={px:it.px,prev:it.prev,open:it.open,hi:it.hi,lo:it.lo,vol:it.vol,amt:it.amt,ops:it.ops};
+      it.px=q.u;it.prev=q.a>0?q.a:it.base.px;it.live=true;
+      if(!it.fixed&&q.ap>0){it.open=q.ap;it.hi=q.mx;it.lo=q.mn;it.vol=q.nom;it.ops=q.ops}
+      if(q.vol>0)it.amt=q.vol;
+      const s=q.f+' '+q.h;if(s>stamp)stamp=s;n++;
+    });
+    if(n){m.live={stamp,hora:stamp.slice(11,16),n};m.stamp=stamp;return true}
+  }catch(e){}
+  return false;
+}
+const priceLbl=()=>MKT&&MKT.live?'Precio del día '+MKT.live.hora:'Cierre '+(MKT?fdate(MKT.date):'');
+let liveT=null;
+function startLiveRefresh(){
+  clearInterval(liveT);
+  liveT=setInterval(async()=>{
+    if(!MKT||!MKT.live||document.hidden)return;
+    if(await applyRava(MKT)){
+      const n=S?evalPending():0;chipMkt();
+      if(n)toast(n+' orden(es) pendiente(s) ejecutada(s).');
+      const ae=document.activeElement;
+      if(!$('#ov')&&!(ae&&ae.tagName==='INPUT'))render();
+    }
+  },180000);
+}
 /* ===== MERCADO (carga, caché) ===== */
 async function loadMarket(force){
   mktState='load';chipMkt();
@@ -326,19 +360,20 @@ async function loadMarket(force){
     MKT=await loadMarketLive();
     mktState='ok';
     LS.set('sim.mkt',JSON.stringify(MKT));
+    await applyRava(MKT);
   }catch(e){
     let c=null;try{c=JSON.parse(LS.get('sim.mkt')||'null')}catch(x){}
     if(!c){try{const r=await fetch('data/snapshot.json');const j=await r.json();if(j&&j.items)c=j}catch(x){}}
-    if(c&&c.items){c.map={};c.items.forEach(i=>c.map[i.tk]=i);MKT=c;mktState='cache'}
+    if(c&&c.items){c.map={};c.items.forEach(i=>c.map[i.tk]=i);MKT=c;mktState='cache';await applyRava(MKT)}
     else{MKT=null;mktState='fail'}
   }
-  chipMkt();
+  chipMkt();startLiveRefresh();
   if(S){const n=evalPending();if(n)toast(n+(n>1?' órdenes pendientes se ejecutaron':' orden pendiente se ejecutó')+' con el último cierre.');render()}
 }
 function chipMkt(){const c=$('#chipMkt');if(!c)return;
   if(mktState==='load'){c.className='chip warn';c.textContent='Cargando mercado…'}
-  else if(mktState==='ok'){c.className='chip ok';c.textContent='Cierre del '+fdate(MKT.date)}
-  else if(mktState==='cache'){c.className='chip warn';c.textContent='Sin conexión · datos guardados del '+fdate(MKT.date)}
+  else if(mktState==='ok'){c.className='chip ok';c.textContent=MKT.live?'Precio del día · '+MKT.live.hora+' (demora ~20 min)':'Cierre del '+fdate(MKT.date)}
+  else if(mktState==='cache'){c.className='chip warn';c.textContent=MKT.live?'Precio del día · '+MKT.live.hora:'Sin conexión · datos guardados del '+fdate(MKT.date)}
   else{c.className='chip bad';c.textContent='Mercado no disponible'}
 }
 
@@ -360,7 +395,7 @@ function rCuenta(){
   const resPos=invNet-cost;
   const alloc=Object.keys(TYPE_COL).map(t=>({t,v:rows.filter(r=>r.type===t).reduce((a,r)=>a+(r.val||0),0)})).filter(x=>x.v>0);
   const tv=inv+S.cash;
-  el.innerHTML=`<h2>Mi cuenta</h2><div class="crumb">Resumen y detalle de cuenta${MKT?' · valuada al cierre del '+fdate(MKT.date):''}</div>${noMkt()}
+  el.innerHTML=`<h2>Mi cuenta</h2><div class="crumb">Resumen y detalle de cuenta${MKT?' · valuada al '+(MKT.live?'precio del día ('+MKT.live.hora+')':'cierre del '+fdate(MKT.date)):''}</div>${noMkt()}
   <div class="grid4">
    <div class="card kpi"><div class="l">Total valorizado</div><div class="v num">${money(total)}</div><div class="s ${cls(res)}">${pct(resP)} vs. capital inicial (${money(S.startCash)})</div></div>
    <div class="card kpi"><div class="l">Efectivo disponible</div><div class="v num">${money(available())}</div><div class="s note">${reserved()>0?'Reservado en órdenes: '+money(reserved()):'Sin reservas'}</div></div>
@@ -371,7 +406,7 @@ function rCuenta(){
   <h3 style="color:var(--navy);margin:6px 0 10px">Tenencia</h3>
   ${rows.length?`<div class="tw"><table><thead><tr><th>Especie</th><th class="desc">Tipo</th><th>Cantidad</th><th>Precio prom. compra</th><th>Precio actual</th><th>Costo</th><th>Valuación</th><th>Resultado $</th><th>Resultado %</th><th>Desde</th><th></th></tr></thead><tbody>
   ${rows.map(r=>`<tr class="row" data-tk="${esc(r.tk)}"><td class="tk">${esc(r.tk)}</td><td class="desc">${esc(r.type)}</td><td class="num">${fmt(r.qty,0)}</td><td class="num">${money(r.avg*(r.it?r.it.unit:1))}</td><td class="num">${r.it?money(r.px):'—'}</td><td class="num">${money(r.cost)}</td><td class="num">${money(r.val)}</td><td class="num ${cls(r.res)}">${money(r.res)}</td><td class="num ${cls(r.res)}">${pct(r.resPct)}</td><td class="num">${fdate(new Date(r.first).toISOString())}</td><td><button class="btn sm g" data-op="${esc(r.tk)}">Operar</button></td></tr>`).join('')}
-  </tbody></table></div><p class="note">Resultado = valuación al último cierre (descontando comisión y derechos de venta) menos el costo de compra (con comisión y derechos). Para bonos, cantidad y precios se expresan por valor nominal (precio cada 100 VN).</p>`
+  </tbody></table></div><p class="note">Resultado = valuación al último precio (descontando comisión y derechos de venta) menos el costo de compra (con comisión y derechos). Para bonos, cantidad y precios se expresan por valor nominal (precio cada 100 VN).</p>`
   :`<div class="card empty">Todavía no tenés posiciones. Entrá a <b>Cotizaciones</b>, elegí un instrumento y hacé tu primera compra.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
   el.querySelectorAll('tr.row').forEach(tr=>tr.onclick=e=>{if(e.target.closest('button'))return;openInst(tr.dataset.tk)});
   el.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>openInst(b.dataset.op,'sell'));
@@ -398,7 +433,7 @@ function rCot(){
       case 'ytm':case 'dm':case 'par':return `<td class="num">${fmt(i[k],2)}</td>`;
       default:return `<td class="num">${fmt(i[k],2)}</td>`}
   };
-  el.innerHTML=`<h2>Cotizaciones</h2><div class="crumb">Precios de cierre del Tablero de BYMA${MKT?' · '+fdate(MKT.date):''}. Tocá una especie para ver su panel y operar.</div>${noMkt()}
+  el.innerHTML=`<h2>Cotizaciones</h2><div class="crumb">${MKT&&MKT.live?'Precios del día (Rava, demorados unos 20 minutos) · '+MKT.live.hora:'Precios de cierre del Tablero de BYMA'+(MKT?' · '+fdate(MKT.date):'')}. Tocá una especie para ver su panel y operar.</div>${noMkt()}
   <div class="pills">${TIPOS.map(t=>`<button class="pill ${t.id===panel?'on':''}" data-p="${t.id}">${t.label}</button>`).join('')}</div>
   <div class="tools"><input id="q" placeholder="Buscar especie o nombre…" value="${esc(search)}"><span class="note">${total} instrumentos</span></div>
   <div class="tw" style="max-height:68vh"><table><thead><tr>${cols.map(([k,l])=>`<th class="sortable ${k==='name'?'desc':''}" data-k="${k}">${l}${sortK===k?(sortD>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>
@@ -414,16 +449,16 @@ function rOrd(){
   const el=$('#v-ord');const O=S.orders;
   const st={Ejecutada:'',Pendiente:'pend',Cancelada:'cx',Rechazada:'cx'};
   el.innerHTML=`<h2>Órdenes</h2><div class="crumb">Historial de operaciones de tu cuenta</div>
-  <div class="msg i"><b>¿Cómo funciona una orden?</b> Una orden es la instrucción que enviás al mercado para comprar o vender. La <b>orden a mercado</b> se ejecuta de inmediato al último precio de cierre; la <b>limitada</b> solo se ejecuta si el cierre alcanza tu precio (compra: igual o menor; venta: igual o mayor) y, si no, queda <b>pendiente</b> hasta el próximo cierre.</div>
+  <div class="msg i"><b>¿Cómo funciona una orden?</b> Una orden es la instrucción que enviás al mercado para comprar o vender. La <b>orden a mercado</b> se ejecuta de inmediato al último precio disponible (precio del día si está activo, o el cierre del Tablero); la <b>limitada</b> solo se ejecuta si el precio alcanza el que elegiste (compra: igual o menor; venta: igual o mayor) y, si no, queda <b>pendiente</b> y se evalúa en tus próximos ingresos.</div>
   ${O.length?`<div class="tw"><table><thead><tr><th>Fecha/Hora</th><th>Especie</th><th>Operación</th><th>Tipo</th><th>Cantidad</th><th>Precio</th><th>Monto</th><th>Comisión</th><th>Total</th><th>Plazo</th><th>Estado</th><th></th></tr></thead><tbody>
-  ${O.map(o=>`<tr><td class="num">${fts(o.ts)}</td><td class="tk">${esc(o.tk)}</td><td><span class="badge ${o.side==='C'?'buy':'sell'}">${o.side==='C'?'COMPRA':'VENTA'}</span></td><td>${o.otype==='limitada'?'Limitada':'Mercado'}</td><td class="num">${fmt(o.qty,0)}</td><td class="num">${o.price!=null?money(o.price):(o.limit?'lím. '+money(o.limit):'—')}</td><td class="num">${o.gross!=null?money(o.gross):'—'}</td><td class="num">${o.fee!=null?money(o.fee):'—'}</td><td class="num">${o.total!=null?money(o.total):'—'}</td><td>${esc(o.plazo)}</td><td><span class="badge ${st[o.status]||''}">${o.status}</span>${o.execDate?`<div class="note">cierre ${fdate(o.execDate)}</div>`:''}</td><td>${o.status==='Pendiente'?`<button class="btn sm g" data-cx="${o.id}">Cancelar</button>`:''}</td></tr>`).join('')}
+  ${O.map(o=>`<tr><td class="num">${fts(o.ts)}</td><td class="tk">${esc(o.tk)}</td><td><span class="badge ${o.side==='C'?'buy':'sell'}">${o.side==='C'?'COMPRA':'VENTA'}</span></td><td>${o.otype==='limitada'?'Limitada':'Mercado'}</td><td class="num">${fmt(o.qty,0)}</td><td class="num">${o.price!=null?money(o.price):(o.limit?'lím. '+money(o.limit):'—')}</td><td class="num">${o.gross!=null?money(o.gross):'—'}</td><td class="num">${o.fee!=null?money(o.fee):'—'}</td><td class="num">${o.total!=null?money(o.total):'—'}</td><td>${esc(o.plazo)}</td><td><span class="badge ${st[o.status]||''}">${o.status}</span>${o.execDate?`<div class="note">${esc(o.execNote||'cierre '+fdate(o.execDate))}</div>`:''}</td><td>${o.status==='Pendiente'?`<button class="btn sm g" data-cx="${o.id}">Cancelar</button>`:''}</td></tr>`).join('')}
   </tbody></table></div>`:`<div class="card empty">Todavía no hiciste ninguna operación.<br><br><button class="btn y" onclick="go('cot')">Ir a Cotizaciones</button></div>`}`;
   el.querySelectorAll('[data-cx]').forEach(b=>b.onclick=()=>cancelOrder(b.dataset.cx));
 }
 function rGlo(){
   $('#v-glo').innerHTML=`<h2>Glosario</h2><div class="crumb">Términos que vas a ver en el simulador</div><div class="card"><dl class="gl">
   <dt>Especie / Ticker</dt><dd>Código que identifica cada instrumento. Ej.: YPFD = acciones de YPF.</dd>
-  <dt>Cierre y Cierre anterior</dt><dd>Último precio de la rueda y el de la rueda previa. La variación % compara ambos.</dd>
+  <dt>Cierre y Cierre anterior</dt><dd>Último precio de la rueda y el de la rueda previa. La variación % compara ambos. Durante la rueda, el "precio del día" viene de Rava con unos 20 minutos de demora.</dd>
   <dt>Apertura, Mínimo y Máximo</dt><dd>Primer precio del día y los extremos que alcanzó durante la rueda.</dd>
   <dt>Volumen y Monto</dt><dd>Cantidad de nominales operados y su valor total en pesos.</dd>
   <dt>CEDEAR</dt><dd>Certificado que representa acciones de empresas del exterior y cotiza en pesos en Argentina.</dd>
@@ -442,7 +477,7 @@ function rGlo(){
 /* ===== PANEL DE INSTRUMENTO + ORDEN ===== */
 let cur=null,side='buy',otype='mercado',rangeN=126;
 function chartSVG(it,avg){
-  const h=it.h.slice(-rangeN);if(h.length<2)return '<div class="msg i">Este instrumento no tiene serie histórica en el tablero.</div>';
+  const h=(it.live&&it.h.length?it.h.concat([it.px]):it.h).slice(-rangeN);if(h.length<2)return '<div class="msg i">Este instrumento no tiene serie histórica en el tablero.</div>';
   const W=640,H=210,pl=8,pr=60,pt=10,pb=18;
   let mn=Math.min(...h),mx=Math.max(...h);if(avg!=null){mn=Math.min(mn,avg);mx=Math.max(mx,avg)}
   const sp=(mx-mn)||1;const x=i=>pl+i*(W-pl-pr)/(h.length-1),y=v=>pt+(H-pt-pb)*(1-(v-mn)/sp);
@@ -453,14 +488,14 @@ function chartSVG(it,avg){
    <line x1="${pl}" x2="${W-pr}" y1="${y(mn)}" y2="${y(mn)}" stroke="#dfe5ea"/><line x1="${pl}" x2="${W-pr}" y1="${y(mx)}" y2="${y(mx)}" stroke="#dfe5ea"/>
    ${lbl(mx,y(mx))}${lbl(mn,y(mn))}
    ${avg!=null?`<line x1="${pl}" x2="${W-pr}" y1="${y(avg)}" y2="${y(avg)}" stroke="#153244" stroke-dasharray="5 4"/><text x="${W-pr+6}" y="${y(avg)+4}" font-size="11" fill="#153244" font-family="monospace">PPC</text>`:''}
-   <text x="${pl}" y="${H-3}" font-size="11" fill="#6b7c89">hace ${h.length} ruedas</text><text x="${W-pr}" y="${H-3}" font-size="11" fill="#6b7c89" text-anchor="end">último cierre</text></svg>`;
+   <text x="${pl}" y="${H-3}" font-size="11" fill="#6b7c89">hace ${h.length} ruedas</text><text x="${W-pr}" y="${H-3}" font-size="11" fill="#6b7c89" text-anchor="end">precio actual</text></svg>`;
 }
 function bondInfo(it){
   const b=it.bond;if(!b)return '';
   const row=(l,v)=>`<div class="stat"><div class="l">${l}</div><div class="v num">${v}</div></div>`;
   const ren=b.ren.filter(r=>r[0]>=(MKT.date||'')).slice(0,8), amo=b.amo.filter(r=>r[0]>=(MKT.date||'')).slice(0,8);
   return `<div class="stats">${row('TIR',b.ytm!=null?fmt(b.ytm)+'%':'—')}${row('Duration mod.',fmt(b.dm))}${row('WAL (años)',fmt(b.wal))}${row('Paridad',b.par!=null?fmt(b.par)+'%':'—')}${row('Valor técnico',b.vt!=null?fmt(b.vt):'—')}${row('Int. corridos',b.ai!=null?fmt(b.ai):'—')}${row('Cupón vigente',b.cup!=null?fmt(b.cup*100)+'%':'—')}${row('Vencimiento',fdate(b.fv))}${row('Emisión',fdate(b.fe))}${row('Moneda',esc(it.cur||'—'))}${row('Ley',esc(b.ley||'—'))}${row('Estructura',esc(b.est||'—'))}</div>
-  <div class="note">Emisor: ${esc(b.em||'—')} · Precio en USD: ${b.usd!=null?fmt(b.usd,3):'—'}</div>
+  <div class="note">Emisor: ${esc(b.em||'—')} · Precio en USD: ${b.usd!=null?fmt(b.usd,3):'—'}${it.live?' · TIR, paridad y duration son del cierre del '+fdate(MKT.date):''}</div>
   ${(ren.length||amo.length)?`<h3 style="margin:14px 0 6px;color:var(--navy);font-size:14px">Próximos flujos</h3><div class="flows tw"><table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cada 100 VN</th></tr></thead><tbody>${ren.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Renta</td><td class="num">${fmt(r[1],3)}</td></tr>`).join('')}${amo.map(r=>`<tr><td class="num">${fdate(r[0])}</td><td style="text-align:left">Amortización</td><td class="num">${fmt(r[1],2)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
 }
 function openInst(tk,sd){
@@ -513,8 +548,8 @@ function sum(){
   const L=$('#tL');const lim=L?+L.value:null;
   const px=otype==='limitada'&&lim>0?lim:it.px;const g=q*px/it.unit,fee=g*feePct(),tot=side==='buy'?g+fee:g-fee;
   const fillsNow=otype==='mercado'||(side==='buy'?it.px<=lim:it.px>=lim);
-  $('#tSum').innerHTML=`<div><span>Precio ${otype==='mercado'?'(cierre '+fdate(MKT.date)+')':'límite'}</span><span class="num">${money(px)}</span></div><div><span>Monto</span><span class="num">${money(g)}</span></div><div><span>Comisión + derechos (${fmt(feePct()*100,2)}%)</span><span class="num">${money(fee)}</span></div><div class="tot"><span>${side==='buy'?'Total a pagar':'Total a recibir'}</span><span class="num">${money(tot)}</span></div>`;
-  $('#tMsg').innerHTML=otype==='limitada'?`<div class="msg ${fillsNow?'o':'w'}">${fillsNow?'Con el último cierre esta orden se ejecutaría ahora.':'El último cierre ('+money(it.px)+') no alcanza tu precio: la orden quedará pendiente hasta un próximo cierre que lo cumpla.'}</div>`:'';
+  $('#tSum').innerHTML=`<div><span>Precio ${otype==='mercado'?'('+priceLbl().toLowerCase()+')':'límite'}</span><span class="num">${money(px)}</span></div><div><span>Monto</span><span class="num">${money(g)}</span></div><div><span>Comisión + derechos (${fmt(feePct()*100,2)}%)</span><span class="num">${money(fee)}</span></div><div class="tot"><span>${side==='buy'?'Total a pagar':'Total a recibir'}</span><span class="num">${money(tot)}</span></div>`;
+  $('#tMsg').innerHTML=otype==='limitada'?`<div class="msg ${fillsNow?'o':'w'}">${fillsNow?'Con el precio actual esta orden se ejecutaría ahora.':'El precio actual ('+money(it.px)+') no alcanza tu precio: la orden quedará pendiente y se evalúa cuando vuelvas a ingresar con un precio nuevo.'}</div>`:'';
 }
 function submit(){
   const it=MKT.map[cur];const q=+$('#tQ').value;const L=$('#tL');
